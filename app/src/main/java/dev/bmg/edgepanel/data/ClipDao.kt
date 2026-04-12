@@ -5,41 +5,35 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ClipDao {
 
-    // Observe all clips: pinned first, then by recency
-    @Query("""
-        SELECT * FROM clip_history 
-        ORDER BY isPinned DESC, copiedAt DESC
-    """)
-    fun observeAll(): Flow<List<ClipEntity>>
-
-    // One-shot read for cold starts (no Flow needed)
-    @Query("""
-        SELECT * FROM clip_history 
-        ORDER BY isPinned DESC, copiedAt DESC
-    """)
-    suspend fun getAll(): List<ClipEntity>
-
-    // Insert or replace if same text exists
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(clip: ClipEntity): Long
-
-    // Move existing entry to top by updating its timestamp
-    @Query("UPDATE clip_history SET copiedAt = :ts WHERE text = :text")
-    suspend fun updateTimestamp(text: String, ts: Long = System.currentTimeMillis())
-
     // Check if text already exists
     @Query("SELECT COUNT(*) FROM clip_history WHERE text = :text")
     suspend fun exists(text: String): Int
 
-    // Delete a single entry
+    @Query("SELECT * FROM clip_history ORDER BY isPinned DESC, copiedAt DESC")
+    fun observeAll(): Flow<List<ClipEntity>>
+
+    @Query("SELECT * FROM clip_history ORDER BY isPinned DESC, copiedAt DESC")
+    suspend fun getAll(): List<ClipEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(clip: ClipEntity): Long
+
+    @Query("UPDATE clip_history SET copiedAt = :ts WHERE text = :text")
+    suspend fun updateTimestamp(text: String, ts: Long = System.currentTimeMillis())
+
+    @Query("SELECT COUNT(*) FROM clip_history WHERE text = :text AND type = 'TEXT'")
+    suspend fun existsText(text: String): Int
+
+    // Images are never de-duped by content (too expensive) — always insert
+    @Query("SELECT COUNT(*) FROM clip_history WHERE imagePath = :path")
+    suspend fun existsImage(path: String): Int
+
     @Delete
     suspend fun delete(clip: ClipEntity)
 
-    // Delete by text
     @Query("DELETE FROM clip_history WHERE text = :text")
     suspend fun deleteByText(text: String)
 
-    // Evict oldest unpinned rows beyond the 50-item cap
     @Query("""
         DELETE FROM clip_history 
         WHERE isPinned = 0
@@ -52,11 +46,26 @@ interface ClipDao {
     """)
     suspend fun evictBeyondCap(cap: Int = 50)
 
-    // Clear all unpinned
+    // Returns paths of image files that were evicted so we can delete them
+    @Query("""
+        SELECT imagePath FROM clip_history
+        WHERE isPinned = 0
+        AND imagePath IS NOT NULL
+        AND id NOT IN (
+            SELECT id FROM clip_history
+            WHERE isPinned = 0
+            ORDER BY copiedAt DESC
+            LIMIT :cap
+        )
+    """)
+    suspend fun evictedImagePaths(cap: Int = 50): List<String>
+
     @Query("DELETE FROM clip_history WHERE isPinned = 0")
     suspend fun clearUnpinned()
 
-    // Toggle pin
+    @Query("SELECT imagePath FROM clip_history WHERE isPinned = 0 AND imagePath IS NOT NULL")
+    suspend fun allUnpinnedImagePaths(): List<String>
+
     @Query("UPDATE clip_history SET isPinned = :pinned WHERE id = :id")
     suspend fun setPinned(id: Long, pinned: Boolean)
 

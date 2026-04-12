@@ -11,11 +11,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.security.SecureRandom
 import android.util.Base64
 
-@Database(
-    entities = [ClipEntity::class],
-    version = 1,
-    exportSchema = false
-)
+@Database(entities = [ClipEntity::class], version = 2, exportSchema = false)
 abstract class ClipDatabase : RoomDatabase() {
 
     abstract fun clipDao(): ClipDao
@@ -35,7 +31,6 @@ abstract class ClipDatabase : RoomDatabase() {
 
         private fun buildDatabase(context: Context): ClipDatabase {
             System.loadLibrary("sqlcipher")
-
             val passphrase = getOrCreatePassphrase(context)
             val factory = SupportOpenHelperFactory(passphrase)
 

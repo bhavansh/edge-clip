@@ -4,7 +4,9 @@ package dev.bmg.edgepanel.service
 
 import android.annotation.SuppressLint
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -18,9 +20,11 @@ import android.widget.*
 import dev.bmg.edgepanel.clipboard.ClipboardAccessibilityService
 import dev.bmg.edgepanel.data.ClipEntity
 import dev.bmg.edgepanel.data.ClipRepository
+import dev.bmg.edgepanel.data.ClipType
 import dev.bmg.edgepanel.view.GestureScrollView
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
+import java.io.File
 import kotlin.math.abs
 
 class EdgePanelService : Service() {
@@ -372,21 +376,112 @@ class EdgePanelService : Service() {
     private fun buildClipBlock(clip: ClipEntity): FrameLayout = FrameLayout(this).apply {
         setPadding(dpToPx(14), dpToPx(12), dpToPx(10), dpToPx(10))
 
-        // Full text
-        addView(TextView(context).apply {
-            text = clip.text
-            textSize = 13f
-            setTextColor(Color.parseColor("#1C1C1E"))
-            setLineSpacing(0f, 1.35f)
-            setPadding(0, 0, 0, dpToPx(26))
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-            )
-        })
+        when (clip.type) {
+            ClipType.TEXT -> {
+                addView(TextView(context).apply {
+                    text = clip.text
+                    textSize = 13f
+                    setTextColor(Color.parseColor("#1C1C1E"))
+                    setLineSpacing(0f, 1.35f)
+                    setPadding(0, 0, 0, dpToPx(26))
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT
+                    )
+                })
+                addView(buildPillRow(clip))
+            }
 
-        // Action pills row anchored bottom-end
-        addView(buildPillRow(clip))
+            ClipType.IMAGE -> {
+                val path = clip.imagePath
+                if (path != null) {
+                    addView(buildImageView(path))
+                }
+                addView(buildImagePillRow(clip))
+            }
+        }
+    }
+
+    private fun buildImageView(path: String): ImageView = ImageView(this).apply {
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            dpToPx(140)
+        ).also { it.bottomMargin = dpToPx(30) }
+        scaleType = ImageView.ScaleType.CENTER_CROP
+        clipToOutline = true
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: android.graphics.Outline) {
+                outline.setRoundRect(0, 0, view.width, view.height, dpToPx(8).toFloat())
+            }
+        }
+
+        // Load off main thread
+        scope.launch(Dispatchers.IO) {
+            val bmp = try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
+            if (bmp != null) {
+                withContext(Dispatchers.Main) { setImageBitmap(bmp) }
+            }
+        }
+    }
+
+    private fun buildImagePillRow(clip: ClipEntity): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END
+        )
+
+        addView(buildCopyImagePill(clip))
+        addView(Space(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(6), 1)
+        })
+        addView(buildDeletePill(clip))
+    }
+
+    private fun buildCopyImagePill(clip: ClipEntity): TextView = TextView(this).apply {
+        text = "Copy"
+        textSize = 11.5f
+        setTextColor(Color.parseColor("#48484A"))
+        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        gravity = Gravity.CENTER
+        background = pill(Color.parseColor("#E8E8ED"))
+        setPadding(dpToPx(12), dpToPx(5), dpToPx(12), dpToPx(5))
+
+        setOnClickListener {
+            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            val path = clip.imagePath ?: return@setOnClickListener
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val file = File(path)
+                    // Use FileProvider to expose the file, then set on clipboard
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        this@EdgePanelService,
+                        "${packageName}.fileprovider",
+                        file
+                    )
+                    val clipData = android.content.ClipData.newUri(
+                        contentResolver, "image", uri
+                    )
+                    withContext(Dispatchers.Main) {
+                        ClipboardAccessibilityService.instance?.isInternalCopy = true
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        cm.setPrimaryClip(clipData)
+                        text = "Copied ✓"
+                        setTextColor(Color.parseColor("#34C759"))
+                        background = pill(Color.parseColor("#E3F9E8"))
+                        postDelayed({
+                            text = "Copy"
+                            setTextColor(Color.parseColor("#48484A"))
+                            background = pill(Color.parseColor("#E8E8ED"))
+                        }, 1800)
+                    }
+                } catch (e: Exception) {
+                    Log.e("EdgePanelService", "Image copy failed", e)
+                }
+            }
+        }
     }
 
     // =========================================================================
@@ -403,7 +498,7 @@ class EdgePanelService : Service() {
         )
 
         // Copy pill
-        addView(buildCopyPill(clip.text))
+        addView(buildCopyPill(clip.text!!))
 
         // Small spacer
         addView(Space(context).apply {
@@ -414,7 +509,7 @@ class EdgePanelService : Service() {
         addView(buildDeletePill(clip))
     }
 
-    private fun buildCopyPill(clipText: String): TextView = TextView(this).apply {
+    private fun buildCopyPill(clipText: String?): TextView = TextView(this).apply {
         text = "Copy"
         textSize = 11.5f
         setTextColor(Color.parseColor("#48484A"))
@@ -424,7 +519,7 @@ class EdgePanelService : Service() {
         setPadding(dpToPx(12), dpToPx(5), dpToPx(12), dpToPx(5))
 
         setOnClickListener {
-            copyToClipboard(clipText)
+            copyToClipboard(clipText ?: return@setOnClickListener)
             performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             text = "Copied ✓"
             setTextColor(Color.parseColor("#34C759"))
@@ -545,14 +640,9 @@ class EdgePanelService : Service() {
     // =========================================================================
 
     private fun copyToClipboard(text: String) {
-        val intent = Intent(
-            this,
-            dev.bmg.edgepanel.clipboard.ClipboardProxyActivity::class.java
-        ).apply {
-            putExtra(dev.bmg.edgepanel.clipboard.ClipboardProxyActivity.EXTRA_TEXT, text)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(intent)
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        ClipboardAccessibilityService.instance?.isInternalCopy = true
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("clip", text))
     }
 
     // =========================================================================

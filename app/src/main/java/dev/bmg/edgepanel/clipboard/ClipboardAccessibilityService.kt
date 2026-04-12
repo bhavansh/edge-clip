@@ -4,12 +4,17 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import dev.bmg.edgepanel.data.ClipRepository
 import kotlinx.coroutines.*
+import java.io.ByteArrayOutputStream
+import androidx.core.graphics.scale
 
 class ClipboardAccessibilityService : AccessibilityService() {
 
@@ -17,6 +22,7 @@ class ClipboardAccessibilityService : AccessibilityService() {
     private var repository: ClipRepository? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var lastStoredText: String? = null
+    private var lastStoredImageUri: String? = null  // ← add this
     var isInternalCopy: Boolean = false
 
     override fun onServiceConnected() {
@@ -43,42 +49,70 @@ class ClipboardAccessibilityService : AccessibilityService() {
     // foreground context MIUI requires. No coroutine dispatch — read now.
     // =========================================================================
 
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-
-        // Read synchronously on the accessibility thread
-        // MIUI context is only valid for the duration of this callback
         val cm = clipboardManager ?: return
+        val clip = cm.primaryClip ?: return
+        val item = clip.getItemAt(0) ?: return
+        val description = clip.description
+
+        if ((0 until description.mimeTypeCount).any { description.getMimeType(it).startsWith("image/") }) {
+            val uri = item.uri
+            if (uri != null && uri.toString() != lastStoredImageUri) {
+                handleImageClip(uri)
+            }
+            return
+        }
+
         val text = try {
-            cm.primaryClip
-                ?.getItemAt(0)
-                ?.coerceToText(this)
-                ?.toString()
-                ?.trim()
-        } catch (e: Exception) {
-            Log.e(TAG, "Sync read failed", e)
-            return
-        }
+            item.coerceToText(this)?.toString()?.trim()
+        } catch (e: Exception) { return }
 
-        if (text.isNullOrBlank()) return
-        if (text == lastStoredText) return
-
-        if (isInternalCopy) {
-            isInternalCopy = false
-            lastStoredText = text
-            return
-        }
-
-        Log.d(TAG, "Event type=${event.eventType} clip='${text.take(40)}'")
+        if (text.isNullOrBlank() || text == lastStoredText) return
+        if (isInternalCopy) { isInternalCopy = false; lastStoredText = text; return }
         lastStoredText = text
+        scope.launch(Dispatchers.IO) { repository?.add(text) }
+    }
+    private fun handleImageClip(uri: Uri) {
+        val uriString = uri.toString()
+        if (uriString == lastStoredImageUri) return  // ← skip if already stored
+        lastStoredImageUri = uriString
 
-        // Dispatch store to IO thread — don't block the accessibility callback
         scope.launch(Dispatchers.IO) {
-            repository?.add(text)
-            Log.d(TAG, "Stored: '${text.take(60)}'")
+            try {
+                val bytes = compressImageUri(uri) ?: return@launch
+                repository?.addImage(bytes)
+            } catch (e: Exception) {
+                Log.e(TAG, "Image capture failed", e)
+            }
         }
     }
 
+    private fun compressImageUri(uri: Uri): ByteArray? {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri) ?: return null
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream.close()
+            if (bitmap == null) return null
+
+            // Scale down if huge — panel is narrow, no need for full res
+            val maxDim = 1200
+            val scaled = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height)
+                bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt())
+            } else bitmap
+
+            ByteArrayOutputStream().also { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 82, out)
+                if (scaled !== bitmap) scaled.recycle()
+                bitmap.recycle()
+            }.toByteArray()
+        } catch (e: Exception) {
+            Log.e(TAG, "Compress failed", e)
+            null
+        }
+    }
     override fun onInterrupt() {}
 
     // =========================================================================
@@ -87,28 +121,27 @@ class ClipboardAccessibilityService : AccessibilityService() {
 
     fun readClipboardNow() {
         val cm = clipboardManager ?: return
-        val text = try {
-            cm.primaryClip
-                ?.getItemAt(0)
-                ?.coerceToText(this)
-                ?.toString()
-                ?.trim()
-        } catch (e: Exception) { return }
+        val clip = cm.primaryClip ?: return
+        val item = clip.getItemAt(0) ?: return
+        val description = clip.description
 
-        if (text.isNullOrBlank()) return
-        if (text == lastStoredText) return
-        if (isInternalCopy) {
-            isInternalCopy = false
-            lastStoredText = text
+        if ((0 until description.mimeTypeCount).any { description.getMimeType(it).startsWith("image/") }) {
+            val uri = item.uri
+            if (uri != null && uri.toString() != lastStoredImageUri) {
+                handleImageClip(uri)
+            }
             return
         }
-        lastStoredText = text
-        scope.launch(Dispatchers.IO) {
-            repository?.add(text)
-            Log.d(TAG, "Stored from panel open: '${text.take(60)}'")
-        }
-    }
 
+        val text = try {
+            item.coerceToText(this)?.toString()?.trim()
+        } catch (e: Exception) { return }
+
+        if (text.isNullOrBlank() || text == lastStoredText) return
+        if (isInternalCopy) { isInternalCopy = false; lastStoredText = text; return }
+        lastStoredText = text
+        scope.launch(Dispatchers.IO) { repository?.add(text) }
+    }
     private fun initClipboard() {
         clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         repository = ClipRepository.getInstance(this)
