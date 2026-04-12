@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">EdgePanel</string>
     <string name="title_activity_main.xml">activity_main.xml</string>
+    <string name="accessibility_service_description">
+    Edge Panel uses accessibility to read clipboard content in the background,
+    so your copied text is always saved even when the app is not in focus.
+    </string>
 </resources>
+
