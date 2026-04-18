@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import java.io.File
+import java.security.MessageDigest
 
 class ClipRepository private constructor(
     private val dao: ClipDao,
