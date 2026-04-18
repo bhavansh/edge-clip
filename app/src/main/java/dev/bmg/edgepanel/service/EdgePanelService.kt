@@ -122,7 +122,7 @@ class EdgePanelService : Service() {
             .setContentTitle("Edge Panel is active")
             .setContentText("" +
                     "Swipe the edge handle to see clipboard history")
-            .setSmallIcon(dev.bmg.edgepanel.R.drawable.ic_launcher_foreground) // Use existing icon
+            .setSmallIcon(dev.bmg.edgepanel.R.drawable.ic_notification)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .build()
