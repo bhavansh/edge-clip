@@ -14,7 +14,7 @@
 .cxx
 local.properties
 /app/build
-gradle
+.gradle
 .idea
 keystore.properties
 release-key.jks
