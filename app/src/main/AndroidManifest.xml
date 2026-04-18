@@ -46,7 +46,8 @@
         <!-- ── Edge Panel Overlay Service ───────────────────────────── -->
         <service
             android:name=".service.EdgePanelService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
 
         <!-- ── Accessibility Service ────────────────────────────────── -->
         <service
