@@ -50,6 +50,9 @@ class EdgePanelService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!checkPermissionsOrStop()) return
+        
+        ServiceState.setRunning(true)
         startForegroundNotification()
         repository = ClipRepository.getInstance(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
@@ -60,7 +63,43 @@ class EdgePanelService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        checkPermissionsOrStop()
         return START_STICKY
+    }
+
+    private fun checkPermissionsOrStop(): Boolean {
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            Log.e(TAG, "Overlay permission missing! Stopping service.")
+            ServiceState.setRunning(false)
+            stopSelf()
+            return false
+        }
+        if (!isAccessibilityServiceEnabled()) {
+            Log.e(TAG, "Accessibility permission missing! Stopping service.")
+            ServiceState.setRunning(false)
+            stopSelf()
+            return false
+        }
+        return true
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val expectedComponent = android.content.ComponentName(
+            this,
+            dev.bmg.edgepanel.clipboard.ClipboardAccessibilityService::class.java
+        ).flattenToString()
+
+        val enabledServices = android.provider.Settings.Secure.getString(
+            contentResolver,
+            android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+
+        val splitter = android.text.TextUtils.SimpleStringSplitter(':')
+        splitter.setString(enabledServices)
+        while (splitter.hasNext()) {
+            if (splitter.next().equals(expectedComponent, ignoreCase = true)) return true
+        }
+        return false
     }
 
     private fun startForegroundNotification() {
@@ -70,7 +109,7 @@ class EdgePanelService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId, channelName,
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
                 description = "Keeps the edge panel active"
                 setShowBadge(false)
@@ -81,7 +120,8 @@ class EdgePanelService : Service() {
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Edge Panel is active")
-            .setContentText("Swipe the edge handle to see clipboard history")
+            .setContentText("" +
+                    "Swipe the edge handle to see clipboard history")
             .setSmallIcon(dev.bmg.edgepanel.R.drawable.ic_launcher_foreground) // Use existing icon
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -188,6 +228,7 @@ class EdgePanelService : Service() {
     }
 
     override fun onDestroy() {
+        ServiceState.setRunning(false)
         scope.cancel()
         removeFocusWindow()
         panelView?.let { safeRemoveView(it) }

@@ -76,6 +76,11 @@ class ClipboardAccessibilityService : AccessibilityService() {
     }
     private fun handleImageClip(uri: Uri) {
         val uriString = uri.toString()
+        if (isInternalCopy) {
+            isInternalCopy = false
+            lastStoredImageUri = uriString
+            return
+        }
         if (uriString == lastStoredImageUri) return  // ← skip if already stored
         lastStoredImageUri = uriString
 

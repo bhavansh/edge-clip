@@ -29,8 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.bmg.edgepanel.clipboard.ClipboardAccessibilityService
 import dev.bmg.edgepanel.service.EdgePanelService
+import dev.bmg.edgepanel.service.ServiceState
 
 class MainActivity : ComponentActivity() {
 
@@ -38,6 +40,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val context = LocalContext.current
+            val isRunning by ServiceState.isServiceRunning.collectAsStateWithLifecycle()
+
             // Recheck permissions every time screen resumes
             var hasOverlay by remember { mutableStateOf(Settings.canDrawOverlays(this)) }
             var hasA11y by remember { mutableStateOf(isAccessibilityEnabled()) }
@@ -106,9 +110,14 @@ class MainActivity : ComponentActivity() {
                     },
                     onStopClick = {
                         stopService(Intent(this, EdgePanelService::class.java))
-                    }
+                    },
+                    isRunning = isRunning
                 )
             }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            @Suppress("DEPRECATION")
+            window.setHideOverlayWindows(true)
         }
     }
 
@@ -141,9 +150,9 @@ fun EdgePanelScreen(
     onRequestAccessibility: () -> Unit,
     onRequestNotification: () -> Unit,
     onStartClick: () -> Unit,
-    onStopClick: () -> Unit
+    onStopClick: () -> Unit,
+    isRunning: Boolean
 ) {
-    var running by remember { mutableStateOf(false) }
     val allGranted = hasOverlayPermission && hasAccessibilityPermission && hasNotificationPermission
 
     Surface(
@@ -180,13 +189,13 @@ fun EdgePanelScreen(
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            if (running) "Panel is active" else "Panel is stopped",
+                            if (isRunning) "Panel is active" else "Panel is stopped",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            if (running) "Swipe the edge handle to open"
+                            if (isRunning) "Swipe the edge handle to open"
                             else "Tap Start to activate the edge panel",
                             fontSize = 13.sp,
                             color = Color(0xFF8E8E93),
@@ -198,7 +207,7 @@ fun EdgePanelScreen(
                             .size(10.dp)
                             .clip(RoundedCornerShape(50))
                             .background(
-                                if (running) Color(0xFF34C759) else Color(0xFFFF3B30)
+                                if (isRunning) Color(0xFF34C759) else Color(0xFFFF3B30)
                             )
                     )
                 }
@@ -237,11 +246,10 @@ fun EdgePanelScreen(
 
             // ── Action buttons ─────────────────────────────────────────
             OneUICard {
-                if (!running) {
+                if (!isRunning) {
                     Button(
                         onClick = {
                             onStartClick()
-                            running = true
                         },
                         enabled = allGranted,
                         modifier = Modifier.fillMaxWidth(),
@@ -261,7 +269,6 @@ fun EdgePanelScreen(
                     Button(
                         onClick = {
                             onStopClick()
-                            running = false
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
