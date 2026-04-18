@@ -3,6 +3,9 @@
 package dev.bmg.edgepanel.service
 
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -11,12 +14,14 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import android.view.*
 import android.widget.*
+import androidx.core.app.NotificationCompat
 import dev.bmg.edgepanel.clipboard.ClipboardAccessibilityService
 import dev.bmg.edgepanel.data.ClipEntity
 import dev.bmg.edgepanel.data.ClipRepository
@@ -43,15 +48,46 @@ class EdgePanelService : Service() {
     // Lifecycle
     // =========================================================================
 
-    // Replace your onCreate wiring with this
     override fun onCreate() {
         super.onCreate()
+        startForegroundNotification()
         repository = ClipRepository.getInstance(this)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createEdgeHandle()
         createFocusWindow()          // create invisible focus window
         wireAccessibilityService()   // wire callback when service is ready
         Log.d(TAG, "Service created")
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
+    private fun startForegroundNotification() {
+        val channelId = "edge_panel_service"
+        val channelName = "Edge Panel Service"
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId, channelName,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps the edge panel active"
+                setShowBadge(false)
+            }
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Edge Panel is active")
+            .setContentText("Swipe the edge handle to see clipboard history")
+            .setSmallIcon(dev.bmg.edgepanel.R.drawable.ic_launcher_foreground) // Use existing icon
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setOngoing(true)
+            .build()
+
+        startForeground(1, notification)
     }
 
 // =========================================================================

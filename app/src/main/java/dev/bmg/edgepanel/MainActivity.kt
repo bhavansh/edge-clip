@@ -1,15 +1,20 @@
 // MainActivity.kt
 package dev.bmg.edgepanel
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,9 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import dev.bmg.edgepanel.clipboard.ClipboardAccessibilityService
 import dev.bmg.edgepanel.service.EdgePanelService
 
@@ -30,9 +37,26 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val context = LocalContext.current
             // Recheck permissions every time screen resumes
             var hasOverlay by remember { mutableStateOf(Settings.canDrawOverlays(this)) }
             var hasA11y by remember { mutableStateOf(isAccessibilityEnabled()) }
+            var hasNotificationPermission by remember {
+                mutableStateOf(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                    } else true
+                )
+            }
+
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { isGranted ->
+                hasNotificationPermission = isGranted
+            }
 
             // Update state when activity resumes (user returning from Settings)
             DisposableEffect(Unit) {
@@ -59,6 +83,7 @@ class MainActivity : ComponentActivity() {
                 EdgePanelScreen(
                     hasOverlayPermission     = hasOverlay,
                     hasAccessibilityPermission = hasA11y,
+                    hasNotificationPermission = hasNotificationPermission,
                     onRequestOverlay = {
                         startActivity(
                             Intent(
@@ -70,8 +95,14 @@ class MainActivity : ComponentActivity() {
                     onRequestAccessibility = {
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     },
+                    onRequestNotification = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    },
                     onStartClick = {
-                        startService(Intent(this, EdgePanelService::class.java))
+                        val intent = Intent(this, EdgePanelService::class.java)
+                        ContextCompat.startForegroundService(this, intent)
                     },
                     onStopClick = {
                         stopService(Intent(this, EdgePanelService::class.java))
@@ -105,13 +136,15 @@ class MainActivity : ComponentActivity() {
 fun EdgePanelScreen(
     hasOverlayPermission: Boolean,
     hasAccessibilityPermission: Boolean,
+    hasNotificationPermission: Boolean,
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
+    onRequestNotification: () -> Unit,
     onStartClick: () -> Unit,
     onStopClick: () -> Unit
 ) {
     var running by remember { mutableStateOf(false) }
-    val allGranted = hasOverlayPermission && hasAccessibilityPermission
+    val allGranted = hasOverlayPermission && hasAccessibilityPermission && hasNotificationPermission
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -189,8 +222,17 @@ fun EdgePanelScreen(
                 PermissionRow(
                     label = "Accessibility (clipboard access)",
                     granted = hasAccessibilityPermission,
-                    onGrant = onRequestAccessibility
+                    onGrant = onRequestAccessibility,
+                    showHint = Build.VERSION.SDK_INT >= 33 && !hasAccessibilityPermission
                 )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Spacer(Modifier.height(8.dp))
+                    PermissionRow(
+                        label = "Notifications (keep service alive)",
+                        granted = hasNotificationPermission,
+                        onGrant = onRequestNotification
+                    )
+                }
             }
 
             // ── Action buttons ─────────────────────────────────────────
@@ -269,38 +311,50 @@ private fun OneUICard(content: @Composable ColumnScope.() -> Unit) {
 private fun PermissionRow(
     label: String,
     granted: Boolean,
-    onGrant: () -> Unit
+    onGrant: () -> Unit,
+    showHint: Boolean = false
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            fontSize = 14.sp,
-            color = Color(0xFF3C3C43),
-            modifier = Modifier.weight(1f)
-        )
-        if (granted) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                "Granted",
-                fontSize = 13.sp,
-                color = Color(0xFF34C759),
-                fontWeight = FontWeight.Medium
+                label,
+                fontSize = 14.sp,
+                color = Color(0xFF3C3C43),
+                modifier = Modifier.weight(1f)
             )
-        } else {
-            TextButton(
-                onClick = onGrant,
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-            ) {
+            if (granted) {
                 Text(
-                    "Grant →",
+                    "Granted",
                     fontSize = 13.sp,
-                    color = Color(0xFF007AFF),
+                    color = Color(0xFF34C759),
                     fontWeight = FontWeight.Medium
                 )
+            } else {
+                TextButton(
+                    onClick = onGrant,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        "Grant →",
+                        fontSize = 13.sp,
+                        color = Color(0xFF007AFF),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
+        }
+        if (showHint) {
+            Text(
+                "Note: If grayed out, go to App Info > (⋮) > Allow restricted settings.",
+                fontSize = 11.sp,
+                color = Color(0xFFFF3B30),
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }

@@ -50,21 +50,21 @@ EdgePanel is a secure Android clipboard manager that provides a floating "Edge P
 - **Clipboard Access:** On modern Android versions, clipboard access from the background is restricted. Always use `ClipboardAccessibilityService` in conjunction with the "Focus Window" strategy in `EdgePanelService`.
 - **Memory Management:** Image clips are capped at 50 items by default. The `ClipRepository` handles the eviction of old files and database entries.
 
-## Project Structure
+## Important Learnings & Troubleshooting
 
-```text
-app/src/main/java/dev/bmg/edgepanel/
-├── MainActivity.kt           # Main settings UI (Compose)
-├── clipboard/
-│   ├── ClipboardAccessibilityService.kt  # Background monitor
-│   └── ClipboardProxyActivity.kt         # Helper activity
-├── data/
-│   ├── ClipDao.kt            # Room DAO
-│   ├── ClipDatabase.kt       # Encrypted Room DB setup
-│   ├── ClipEntity.kt         # Data model
-│   └── ClipRepository.kt     # Data orchestration
-├── service/
-│   └── EdgePanelService.kt   # Overlay window manager
-└── view/
-    └── GestureScrollView.kt  # Custom view for panel gestures
-```
+### 1. Release Build & Minification (R8/ProGuard)
+- **Problem:** Release builds with `isMinifyEnabled = true` would crash or fail to install because R8 stripped critical Room and SQLCipher classes.
+- **Solution:** Added explicit `-keep` rules for Room, SQLCipher, and AndroidX Security. Specifically, JNI handles in SQLCipher (`nativeHandle`) and Room's generated implementation classes must be preserved.
+- **Verification:** Always verify release artifacts with `jarsigner -verify` to ensure they are actually signed. If `keystore.properties` path is incorrect, the build might succeed but produce an unsigned (uninstallable) APK.
+
+### 2. Android 13+ "Restricted Settings"
+- **Problem:** Sideloaded APKs (e.g., via WhatsApp or File Manager) have sensitive permissions like "Accessibility" grayed out by default.
+- **Solution:** Users must manually "Allow restricted settings" for the app.
+    1. Open **Settings** > **Apps** > **EdgePanel**.
+    2. Tap the **three-dot menu** (top right).
+    3. Select **Allow restricted settings**.
+    4. Go back to Accessibility settings to enable the service.
+
+### 3. Service Persistence
+- **Foreground Service:** To prevent the system from killing the overlay when swiped from recent apps, the service must be a Foreground Service with a persistent notification and return `START_STICKY` in `onStartCommand`.
+
