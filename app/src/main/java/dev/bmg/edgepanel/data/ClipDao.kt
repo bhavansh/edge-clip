@@ -24,9 +24,12 @@ interface ClipDao {
     @Query("SELECT COUNT(*) FROM clip_history WHERE text = :text AND type = 'TEXT'")
     suspend fun existsText(text: String): Int
 
-    // Images are never de-duped by content (too expensive) — always insert
+    // Images deduplicated by their hash-based filenames
     @Query("SELECT COUNT(*) FROM clip_history WHERE imagePath = :path")
     suspend fun existsImage(path: String): Int
+
+    @Query("UPDATE clip_history SET copiedAt = :ts WHERE imagePath = :path")
+    suspend fun updateTimestampImage(path: String, ts: Long = System.currentTimeMillis())
 
     @Delete
     suspend fun delete(clip: ClipEntity)

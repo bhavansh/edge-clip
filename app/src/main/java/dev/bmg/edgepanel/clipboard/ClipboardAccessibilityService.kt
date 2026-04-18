@@ -86,15 +86,28 @@ class ClipboardAccessibilityService : AccessibilityService() {
 
         scope.launch(Dispatchers.IO) {
             try {
-                val bytes = compressImageUri(uri) ?: return@launch
-                repository?.addImage(bytes)
+                val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+                val extension = when {
+                    mimeType.contains("png") -> "png"
+                    mimeType.contains("gif") -> "gif"
+                    mimeType.contains("webp") -> "webp"
+                    else -> "jpg"
+                }
+
+                val bytes = if (extension == "gif") {
+                    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } else {
+                    processImageUri(uri, extension)
+                } ?: return@launch
+
+                repository?.addImage(bytes, extension)
             } catch (e: Exception) {
                 Log.e(TAG, "Image capture failed", e)
             }
         }
     }
 
-    private fun compressImageUri(uri: Uri): ByteArray? {
+    private fun processImageUri(uri: Uri, extension: String): ByteArray? {
         return try {
             val inputStream = contentResolver.openInputStream(uri) ?: return null
             val bitmap = BitmapFactory.decodeStream(inputStream)
@@ -108,13 +121,24 @@ class ClipboardAccessibilityService : AccessibilityService() {
                 bitmap.scale((bitmap.width * scale).toInt(), (bitmap.height * scale).toInt())
             } else bitmap
 
+            val format = when (extension) {
+                "png" -> Bitmap.CompressFormat.PNG
+                "webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Bitmap.CompressFormat.WEBP_LOSSLESS
+                } else {
+                    @Suppress("DEPRECATION")
+                    Bitmap.CompressFormat.WEBP
+                }
+                else -> Bitmap.CompressFormat.JPEG
+            }
+
             ByteArrayOutputStream().also { out ->
-                scaled.compress(Bitmap.CompressFormat.JPEG, 82, out)
+                scaled.compress(format, 82, out)
                 if (scaled !== bitmap) scaled.recycle()
                 bitmap.recycle()
             }.toByteArray()
         } catch (e: Exception) {
-            Log.e(TAG, "Compress failed", e)
+            Log.e(TAG, "Process image failed", e)
             null
         }
     }

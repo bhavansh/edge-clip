@@ -23,15 +23,23 @@ class ClipRepository private constructor(
     }
 
     // --- Image ---
-    // Call this from the accessibility service with a compressed JPEG byte array.
+    // Call this from the accessibility service with a compressed byte array.
     // Returns the saved file path, or null on failure.
-    suspend fun addImage(jpegBytes: ByteArray): String? {
-        val fileName = "clip_img_${System.currentTimeMillis()}.jpg"
+    suspend fun addImage(bytes: ByteArray, extension: String = "jpg"): String? {
+        val hash = MessageDigest.getInstance("MD5")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        val fileName = "clip_img_$hash.$extension"
         val file = File(context.filesDir, fileName)
+
         return try {
-            file.writeBytes(jpegBytes)
+            if (!file.exists()) {
+                file.writeBytes(bytes)
+            }
             val path = file.absolutePath
-            if (dao.existsImage(path) == 0) {
+            if (dao.existsImage(path) > 0) {
+                dao.updateTimestampImage(path)
+            } else {
                 dao.insert(ClipEntity(type = ClipType.IMAGE, imagePath = path))
                 evictOldImages()
             }
