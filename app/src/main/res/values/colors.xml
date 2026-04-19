@@ -8,11 +8,13 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="brand_primary">#007AFF</color>
 
     <!-- Semantic UI Colors (Light Mode) -->
     <color name="panel_bg">#F2FFFFFF</color>
     <color name="handler_bg">#80666666</color>
     <color name="handler_border">#00000000</color>
+    <color name="action_bar_bg">#1A000000</color>
     
     <color name="text_primary">#1C1C1E</color>
     <color name="text_secondary">#8E8E93</color>

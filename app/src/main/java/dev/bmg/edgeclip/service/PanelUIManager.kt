@@ -38,7 +38,6 @@ class PanelUIManager(
 
         clips.forEach { clip ->
             container.addView(buildClipBlock(clip))
-            container.addView(buildBlockDivider())
         }
     }
 
@@ -66,145 +65,112 @@ class PanelUIManager(
     }
 
     private fun buildClipBlock(clip: ClipEntity): FrameLayout = FrameLayout(context).apply {
-        setPadding(dpToPx(14), dpToPx(12), dpToPx(10), dpToPx(10))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).also { it.topMargin = dpToPx(8) }
+        
+        background = pill(ContextCompat.getColor(context, R.color.action_bar_bg)).apply {
+            cornerRadius = dpToPx(12).toFloat()
+        }
+        clipToOutline = true
 
-        when (clip.type) {
-            ClipType.TEXT -> {
-                addView(TextView(context).apply {
-                    text = clip.text
-                    textSize = 13f
-                    setTextColor(ContextCompat.getColor(context, R.color.text_primary))
-                    setLineSpacing(0f, 1.35f)
-                    setPadding(0, 0, 0, dpToPx(26))
-                    layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
-                    )
-                })
-                addView(buildPillRow(clip))
+        val contentLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            
+            // Content (Text or Image)
+            when (clip.type) {
+                ClipType.TEXT -> {
+                    addView(TextView(context).apply {
+                        text = clip.text
+                        textSize = 13f
+                        setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                        setLineSpacing(0f, 1.2f)
+                        setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12))
+                    })
+                }
+                ClipType.IMAGE -> {
+                    val path = clip.imagePath
+                    if (path != null) {
+                        addView(buildImageView(path))
+                    }
+                }
             }
 
-            ClipType.IMAGE -> {
-                val path = clip.imagePath
-                if (path != null) {
-                    addView(buildImageView(path))
-                }
-                addView(buildImagePillRow(clip))
+            // Full-width action bar
+            addView(buildActionBar(clip))
+        }
+        
+        addView(contentLayout)
+    }
+
+    private fun buildActionBar(clip: ClipEntity): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dpToPx(36)
+        )
+        background = pill(ContextCompat.getColor(context, R.color.handler_bg)).apply {
+            cornerRadius = 0f // Flat bottom
+        }
+        gravity = Gravity.CENTER_VERTICAL
+
+        // Copy Button
+        val copyBtn = TextView(context).apply {
+            text = "Copy"
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                if (clip.type == ClipType.TEXT) onCopyText(clip.text!!) else onCopyImage(clip)
+                
+                text = "Copied ✓"
+                setTextColor(ContextCompat.getColor(context, R.color.pill_text_success))
+                postDelayed({
+                    text = "Copy"
+                    setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                }, 1500)
             }
         }
+
+        // Divider
+        val divider = View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(1), dpToPx(20))
+            setBackgroundColor(ContextCompat.getColor(context, R.color.divider))
+        }
+
+        // Delete Button
+        val deleteBtn = TextView(context).apply {
+            text = "✕"
+            textSize = 14f
+            setTextColor(ContextCompat.getColor(context, R.color.pill_text_danger))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                onDelete(clip)
+            }
+        }
+
+        addView(copyBtn)
+        addView(divider)
+        addView(deleteBtn)
     }
 
     private fun buildImageView(path: String): ImageView = ImageView(context).apply {
-        layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
             dpToPx(140)
-        ).also { it.bottomMargin = dpToPx(30) }
+        )
         scaleType = ImageView.ScaleType.CENTER_CROP
-        clipToOutline = true
-        outlineProvider = object : ViewOutlineProvider() {
-            override fun getOutline(view: View, outline: Outline) {
-                outline.setRoundRect(0, 0, view.width, view.height, dpToPx(8).toFloat())
-            }
-        }
-
+        
         scope.launch(Dispatchers.IO) {
             val bmp = try { BitmapFactory.decodeFile(path) } catch (_: Exception) { null }
             if (bmp != null) {
                 withContext(Dispatchers.Main) { setImageBitmap(bmp) }
             }
-        }
-    }
-
-    private fun buildImagePillRow(clip: ClipEntity): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM or Gravity.END
-        )
-
-        addView(buildCopyImagePill(clip))
-        addView(Space(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dpToPx(6), 1)
-        })
-        addView(buildDeletePill(clip))
-    }
-
-    private fun buildCopyImagePill(clip: ClipEntity): TextView = TextView(context).apply {
-        text = "Copy"
-        textSize = 11.5f
-        setTextColor(ContextCompat.getColor(context, R.color.pill_text))
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        gravity = Gravity.CENTER
-        background = pill(ContextCompat.getColor(context, R.color.pill_bg))
-        setPadding(dpToPx(12), dpToPx(5), dpToPx(12), dpToPx(5))
-
-        setOnClickListener {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            onCopyImage(clip)
-            text = "Copied ✓"
-            setTextColor(ContextCompat.getColor(context, R.color.pill_text_success))
-            background = pill(ContextCompat.getColor(context, R.color.pill_bg_success))
-            postDelayed({
-                text = "Copy"
-                setTextColor(ContextCompat.getColor(context, R.color.pill_text))
-                background = pill(ContextCompat.getColor(context, R.color.pill_bg))
-            }, 1800)
-        }
-    }
-
-    private fun buildPillRow(clip: ClipEntity): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        layoutParams = FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM or Gravity.END
-        )
-
-        addView(buildCopyPill(clip.text!!))
-        addView(Space(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dpToPx(6), 1)
-        })
-        addView(buildDeletePill(clip))
-    }
-
-    private fun buildCopyPill(clipText: String): TextView = TextView(context).apply {
-        text = "Copy"
-        textSize = 11.5f
-        setTextColor(ContextCompat.getColor(context, R.color.pill_text))
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        gravity = Gravity.CENTER
-        background = pill(ContextCompat.getColor(context, R.color.pill_bg))
-        setPadding(dpToPx(12), dpToPx(5), dpToPx(12), dpToPx(5))
-
-        setOnClickListener {
-            onCopyText(clipText)
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            text = "Copied ✓"
-            setTextColor(ContextCompat.getColor(context, R.color.pill_text_success))
-            background = pill(ContextCompat.getColor(context, R.color.pill_bg_success))
-            postDelayed({
-                text = "Copy"
-                setTextColor(ContextCompat.getColor(context, R.color.pill_text))
-                background = pill(ContextCompat.getColor(context, R.color.pill_bg))
-            }, 1800)
-        }
-    }
-
-    private fun buildDeletePill(clip: ClipEntity): TextView = TextView(context).apply {
-        text = "✕"
-        textSize = 11.5f
-        setTextColor(ContextCompat.getColor(context, R.color.pill_text_danger))
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-        gravity = Gravity.CENTER
-        background = pill(ContextCompat.getColor(context, R.color.pill_bg_danger))
-        setPadding(dpToPx(10), dpToPx(5), dpToPx(10), dpToPx(5))
-
-        setOnClickListener {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            onDelete(clip)
         }
     }
 

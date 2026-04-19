@@ -190,7 +190,7 @@ fun EdgeClipScreen(
             Text(
                 "v1.0  ·  by Bhavansh",
                 fontSize = 13.sp,
-                color = Color(0xFF8E8E93),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                 modifier = Modifier.offset(y = (-8).dp)
             )
 
@@ -213,7 +213,7 @@ fun EdgeClipScreen(
                             if (isRunning) "Swipe the edge handle to open"
                             else "Tap Start to activate the edge clip",
                             fontSize = 13.sp,
-                            color = Color(0xFF8E8E93),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             lineHeight = 18.sp
                         )
                     }
@@ -281,7 +281,13 @@ fun EdgeClipScreen(
                     )
                     Switch(
                         checked = bgPollingEnabled,
-                        onCheckedChange = onBgPollingToggle
+                        onCheckedChange = onBgPollingToggle,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color(0xFFD1D1D6)
+                        )
                     )
                 }
                 
@@ -296,18 +302,23 @@ fun EdgeClipScreen(
                         value = pollingFreq,
                         onValueChange = onPollingFreqChange,
                         valueRange = 2f..60f,
-                        steps = 58
+                        steps = 58,
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.primary,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                        )
                     )
                     Text(
                         "Interval between clipboard checks in seconds.",
                         fontSize = 11.sp,
-                        color = Color(0xFF8E8E93)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 } else {
                     Text(
                         "Manual Mode: Clipboard will only be checked when you open the panel.",
                         fontSize = 11.sp,
-                        color = Color(0xFF8E8E93),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         lineHeight = 14.sp
                     )
                 }
@@ -324,14 +335,15 @@ fun EdgeClipScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF007AFF),
+                            containerColor = MaterialTheme.colorScheme.primary,
                             disabledContainerColor = Color(0xFFD1D1D6)
                         )
                     ) {
                         Text(
                             if (allGranted) "Start EdgeClip"
                             else "Grant permissions first",
-                            fontSize = 15.sp
+                            fontSize = 15.sp,
+                            color = Color.White
                         )
                     }
                 } else {
@@ -345,7 +357,7 @@ fun EdgeClipScreen(
                             containerColor = Color(0xFFFF3B30)
                         )
                     ) {
-                        Text("Stop EdgeClip", fontSize = 15.sp)
+                        Text("Stop EdgeClip", fontSize = 15.sp, color = Color.White)
                     }
                 }
             }
@@ -356,7 +368,7 @@ fun EdgeClipScreen(
             Text(
                 "Clipboard data is stored locally and encrypted. No data leaves your device.",
                 fontSize = 12.sp,
-                color = Color(0xFFAEAEB2),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp),
@@ -371,7 +383,7 @@ private fun OneUICard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(16.dp),
-        tonalElevation = 0.dp,
+        tonalElevation = 2.dp,
         shadowElevation = 0.5.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -399,7 +411,7 @@ private fun PermissionRow(
             Text(
                 label,
                 fontSize = 14.sp,
-                color = Color(0xFF3C3C43),
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
             if (granted) {
@@ -417,7 +429,7 @@ private fun PermissionRow(
                     Text(
                         "Grant →",
                         fontSize = 13.sp,
-                        color = Color(0xFF007AFF),
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
                     )
                 }

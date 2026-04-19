@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="brand_primary">#0A84FF</color>
     <!-- Semantic UI Colors (Dark Mode) -->
     <color name="panel_bg">#F21C1C1E</color>
     <color name="handler_bg">#B3E0E0E0</color>
     <color name="handler_border">#00000000</color>
+    <color name="action_bar_bg">#1AFFFFFF</color>
     
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#EBEBF5</color>
