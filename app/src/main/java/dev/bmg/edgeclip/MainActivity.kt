@@ -188,6 +188,7 @@ fun EdgeClipScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             
+            val context = LocalContext.current
             val versionName = remember {
                 try {
                     val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
