@@ -281,13 +281,7 @@ fun EdgeClipScreen(
                     )
                     Switch(
                         checked = bgPollingEnabled,
-                        onCheckedChange = onBgPollingToggle,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color(0xFFD1D1D6)
-                        )
+                        onCheckedChange = onBgPollingToggle
                     )
                 }
                 
@@ -302,12 +296,7 @@ fun EdgeClipScreen(
                         value = pollingFreq,
                         onValueChange = onPollingFreqChange,
                         valueRange = 2f..60f,
-                        steps = 58,
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
-                        )
+                        steps = 58
                     )
                     Text(
                         "Interval between clipboard checks in seconds.",
@@ -333,17 +322,12 @@ fun EdgeClipScreen(
                         },
                         enabled = allGranted,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            disabledContainerColor = Color(0xFFD1D1D6)
-                        )
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
                             if (allGranted) "Start EdgeClip"
                             else "Grant permissions first",
-                            fontSize = 15.sp,
-                            color = Color.White
+                            fontSize = 15.sp
                         )
                     }
                 } else {
@@ -357,7 +341,7 @@ fun EdgeClipScreen(
                             containerColor = Color(0xFFFF3B30)
                         )
                     ) {
-                        Text("Stop EdgeClip", fontSize = 15.sp, color = Color.White)
+                        Text("Stop EdgeClip", fontSize = 15.sp)
                     }
                 }
             }

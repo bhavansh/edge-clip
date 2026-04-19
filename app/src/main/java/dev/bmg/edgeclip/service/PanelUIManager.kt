@@ -2,7 +2,6 @@ package dev.bmg.edgeclip.service
 
 import android.content.Context
 import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -38,6 +37,7 @@ class PanelUIManager(
 
         clips.forEach { clip ->
             container.addView(buildClipBlock(clip))
+            container.addView(buildBlockDivider())
         }
     }
 
@@ -68,17 +68,12 @@ class PanelUIManager(
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
-        ).also { it.topMargin = dpToPx(8) }
+        )
         
-        background = pill(ContextCompat.getColor(context, R.color.action_bar_bg)).apply {
-            cornerRadius = dpToPx(12).toFloat()
-        }
-        clipToOutline = true
-
         val contentLayout = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             
-            // Content (Text or Image)
+            // Re-adding the actual content rendering
             when (clip.type) {
                 ClipType.TEXT -> {
                     addView(TextView(context).apply {
@@ -97,7 +92,7 @@ class PanelUIManager(
                 }
             }
 
-            // Full-width action bar
+            // Full-width action bar at the bottom
             addView(buildActionBar(clip))
         }
         
@@ -108,11 +103,9 @@ class PanelUIManager(
         orientation = LinearLayout.HORIZONTAL
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
-            dpToPx(36)
+            dpToPx(38)
         )
-        background = pill(ContextCompat.getColor(context, R.color.handler_bg)).apply {
-            cornerRadius = 0f // Flat bottom
-        }
+        setBackgroundColor(ContextCompat.getColor(context, R.color.action_bar_bg))
         gravity = Gravity.CENTER_VERTICAL
 
         // Copy Button
@@ -135,7 +128,7 @@ class PanelUIManager(
             }
         }
 
-        // Divider
+        // Vertical divider between Copy and Delete
         val divider = View(context).apply {
             layoutParams = LinearLayout.LayoutParams(dpToPx(1), dpToPx(20))
             setBackgroundColor(ContextCompat.getColor(context, R.color.divider))

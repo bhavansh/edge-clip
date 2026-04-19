@@ -2,5 +2,5 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Theme-aware panel background with rounded corners -->
     <solid android:color="@color/panel_bg" />
-    <corners android:radius="28dp" />
+    <corners android:radius="20dp" />
 </shape>
