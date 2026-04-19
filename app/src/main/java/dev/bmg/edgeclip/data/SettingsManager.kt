@@ -14,6 +14,10 @@ class SettingsManager(context: Context) {
         get() = prefs.getInt(KEY_POLLING_FREQ, 5)
         set(value) = prefs.edit().putInt(KEY_POLLING_FREQ, value).apply()
 
+    var edgeSide: String
+        get() = prefs.getString(KEY_EDGE_SIDE, "right") ?: "right"
+        set(value) = prefs.edit().putString(KEY_EDGE_SIDE, value).apply()
+
     fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
     }
@@ -25,5 +29,6 @@ class SettingsManager(context: Context) {
     companion object {
         const val KEY_BG_POLLING = "background_polling"
         const val KEY_POLLING_FREQ = "polling_frequency"
+        const val KEY_EDGE_SIDE = "edge_side"
     }
 }

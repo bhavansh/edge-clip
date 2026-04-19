@@ -21,6 +21,7 @@ import dev.bmg.edgeclip.data.ClipEntity
 import dev.bmg.edgeclip.data.ClipRepository
 import dev.bmg.edgeclip.data.SettingsManager
 import dev.bmg.edgeclip.view.GestureScrollView
+import dev.bmg.edgeclip.view.QuickballView
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import java.io.File
@@ -29,7 +30,7 @@ import kotlin.math.abs
 class EdgeClipService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var edgeView: View
+    private lateinit var edgeView: QuickballView
     private var panelView: View? = null
 
     private lateinit var repository: ClipRepository
@@ -42,11 +43,23 @@ class EdgeClipService : Service() {
     private lateinit var focusManager: FocusWindowManager
     private lateinit var settingsManager: SettingsManager
 
+    private val restingWidthDp = 26
+    private val fullWidthDp = 40
+
     private val settingsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == SettingsManager.KEY_BG_POLLING || key == SettingsManager.KEY_POLLING_FREQ) {
             if (::focusManager.isInitialized) {
                 focusManager.restartPolling()
             }
+        } else if (key == SettingsManager.KEY_EDGE_SIDE) {
+            updateHandleSide()
+        }
+    }
+
+    private fun updateHandleSide() {
+        if (::edgeView.isInitialized) {
+            safeRemoveView(edgeView)
+            createEdgeHandle()
         }
     }
 
@@ -184,52 +197,80 @@ class EdgeClipService : Service() {
     @SuppressLint("UseCompatLoadingForDrawables")
     private fun createEdgeHandle() {
         val params = handleLayoutParams()
-        edgeView = View(this).apply {
-            background = resources.getDrawable(
-                dev.bmg.edgeclip.R.drawable.edge_clip_handler_bg, theme
-            )
+        val isLeft = settingsManager.edgeSide == "left"
+        edgeView = QuickballView(this).apply {
+            contentDescription = getString(dev.bmg.edgeclip.R.string.edge_clip_handler_desc)
+            setSide(isLeft)
         }
         windowManager.addView(edgeView, params)
         attachHandleTouchListener(params)
     }
 
     private fun handleLayoutParams() = WindowManager.LayoutParams(
-        dpToPx(6), dpToPx(112), // Width back to 6dp, Height doubled (~112dp)
+        dpToPx(restingWidthDp), dpToPx(fullWidthDp),
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
         PixelFormat.TRANSLUCENT
     ).also { 
-        it.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        val isLeft = settingsManager.edgeSide == "left"
+        it.gravity = (if (isLeft) Gravity.START else Gravity.END) or Gravity.CENTER_VERTICAL
         it.x = 0 // Flush with the screen edge
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun attachHandleTouchListener(params: WindowManager.LayoutParams) {
         var initialY = 0
+        var initialTouchX = 0f
         var initialTouchY = 0f
         var isClick = true
+        val isLeft = settingsManager.edgeSide == "left"
 
         edgeView.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialY = params.y
+                    initialTouchX = event.rawX
                     initialTouchY = event.rawY
                     isClick = true
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dy = (event.rawY - initialTouchY).toInt()
-                    if (abs(dy) > dpToPx(10)) {
+                    val dx = (event.rawX - initialTouchX)
+                    val dy = (event.rawY - initialTouchY)
+                    
+                    // Vertical drag for repositioning
+                    if (abs(dy) > dpToPx(15)) {
                         isClick = false
-                        params.y = initialY + dy
-                        windowManager.updateViewLayout(edgeView, params)
                     }
+                    params.y = initialY + dy.toInt()
+
+                    // Horizontal drag for "pull out" effect
+                    val pullDist = if (isLeft) dx else -dx
+                    if (pullDist > dpToPx(10)) {
+                        isClick = false
+                    }
+                    
+                    val expansion = (pullDist / dpToPx(fullWidthDp)).coerceIn(0f, 1f)
+                    edgeView.setExpansion(expansion)
+                    
+                    val currentWidth = restingWidthDp + (fullWidthDp - restingWidthDp) * expansion
+                    params.width = dpToPx(currentWidth.toInt())
+                    
+                    windowManager.updateViewLayout(edgeView, params)
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (isClick) togglePanel()
+                    if (isClick) {
+                        edgeView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        togglePanel()
+                    } else {
+                        // Snap back
+                        edgeView.setExpansion(0f)
+                        params.width = dpToPx(restingWidthDp)
+                        windowManager.updateViewLayout(edgeView, params)
+                    }
                     true
                 }
                 else -> false
@@ -247,6 +288,7 @@ class EdgeClipService : Service() {
         val screenWidth = resources.displayMetrics.widthPixels
         val panelWidth = (screenWidth * 0.40).toInt()
         val panelHeight = (resources.displayMetrics.heightPixels * 0.82).toInt()
+        val isLeft = settingsManager.edgeSide == "left"
 
         val params = WindowManager.LayoutParams(
             panelWidth, panelHeight,
@@ -255,7 +297,7 @@ class EdgeClipService : Service() {
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).also { 
-            it.gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            it.gravity = (if (isLeft) Gravity.START else Gravity.END) or Gravity.CENTER_VERTICAL
             it.x = dpToPx(5) // Displacement from edge
         }
 
@@ -266,7 +308,7 @@ class EdgeClipService : Service() {
 
         panelView = panel
         windowManager.addView(panel, params)
-        animatePanelIn(panel, panelWidth)
+        animatePanelIn(panel)
         edgeView.visibility = View.GONE
         
         focusManager.triggerFocusRead()
@@ -287,7 +329,9 @@ class EdgeClipService : Service() {
         orientation = LinearLayout.VERTICAL
         setPadding(0, dpToPx(20), 0, dpToPx(12))
         background = resources.getDrawable(dev.bmg.edgeclip.R.drawable.edge_clip_panel_bg, theme)
-        translationX = panelWidth.toFloat()
+        
+        val isLeft = settingsManager.edgeSide == "left"
+        translationX = if (isLeft) -panelWidth.toFloat() else panelWidth.toFloat()
         elevation = dpToPx(12).toFloat()
     }
 
@@ -298,7 +342,13 @@ class EdgeClipService : Service() {
             )
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            onFlingRight = { closePanel() }
+            
+            val isLeft = settingsManager.edgeSide == "left"
+            if (isLeft) {
+                onFlingLeft = { closePanel() }
+            } else {
+                onFlingRight = { closePanel() }
+            }
         }
 
         val container = LinearLayout(this).apply {
@@ -317,7 +367,11 @@ class EdgeClipService : Service() {
             if (panel.tag == "closing") return
             panel.tag = "closing"
 
-            val slideOut = resources.displayMetrics.widthPixels * 0.40f
+            val isLeft = settingsManager.edgeSide == "left"
+            val slideOut = (resources.displayMetrics.widthPixels * 0.40f).let { 
+                if (isLeft) -it else it
+            }
+            
             panel.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             panel.animate()
                 .translationX(slideOut)
@@ -336,7 +390,7 @@ class EdgeClipService : Service() {
         }
     }
 
-    private fun animatePanelIn(panel: View, panelWidth: Int) {
+    private fun animatePanelIn(panel: View) {
         panel.setLayerType(View.LAYER_TYPE_HARDWARE, null)
         panel.animate()
             .translationX(0f)

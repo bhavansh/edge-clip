@@ -25,6 +25,9 @@ class GestureScrollView @JvmOverloads constructor(
 
     /** Called when the user flings rightward fast enough to dismiss the panel. */
     var onFlingRight: (() -> Unit)? = null
+    
+    /** Called when the user flings leftward fast enough to dismiss the panel. */
+    var onFlingLeft: (() -> Unit)? = null
 
     private val detector = GestureDetector(
         context,
@@ -38,6 +41,10 @@ class GestureScrollView @JvmOverloads constructor(
                 // Rightward fling with horizontal velocity dominating
                 if (velocityX > MIN_VELOCITY && velocityX > abs(velocityY) * 1.2f) {
                     onFlingRight?.invoke()
+                }
+                // Leftward fling with horizontal velocity dominating
+                if (velocityX < -MIN_VELOCITY && abs(velocityX) > abs(velocityY) * 1.2f) {
+                    onFlingLeft?.invoke()
                 }
                 return false  // never consume
             }

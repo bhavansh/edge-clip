@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
             // Settings State
             var bgPollingEnabled by remember { mutableStateOf(settingsManager.isBackgroundPollingEnabled) }
             var pollingFreq by remember { mutableStateOf(settingsManager.pollingFrequencySeconds.toFloat()) }
+            var edgeSide by remember { mutableStateOf(settingsManager.edgeSide) }
 
             // Recheck permissions every time screen resumes
             var hasOverlay by remember { mutableStateOf(Settings.canDrawOverlays(this)) }
@@ -90,6 +91,7 @@ class MainActivity : ComponentActivity() {
                     hasNotificationPermission = hasNotificationPermission,
                     bgPollingEnabled = bgPollingEnabled,
                     pollingFreq = pollingFreq,
+                    edgeSide = edgeSide,
                     onBgPollingToggle = {
                         bgPollingEnabled = it
                         settingsManager.isBackgroundPollingEnabled = it
@@ -97,6 +99,10 @@ class MainActivity : ComponentActivity() {
                     onPollingFreqChange = {
                         pollingFreq = it
                         settingsManager.pollingFrequencySeconds = it.toInt()
+                    },
+                    onEdgeSideChange = {
+                        edgeSide = it
+                        settingsManager.edgeSide = it
                     },
                     onRequestOverlay = {
                         startActivity(
@@ -158,8 +164,10 @@ fun EdgeClipScreen(
     hasNotificationPermission: Boolean,
     bgPollingEnabled: Boolean,
     pollingFreq: Float,
+    edgeSide: String,
     onBgPollingToggle: (Boolean) -> Unit,
     onPollingFreqChange: (Float) -> Unit,
+    onEdgeSideChange: (String) -> Unit,
     onRequestOverlay: () -> Unit,
     onRequestAccessibility: () -> Unit,
     onRequestNotification: () -> Unit,
@@ -279,6 +287,39 @@ fun EdgeClipScreen(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(10.dp))
+
+                Text(
+                    "Edge Side",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val sides = listOf("left", "right")
+                    sides.forEach { side ->
+                        val isSelected = edgeSide == side
+                        Button(
+                            onClick = { onEdgeSideChange(side) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary 
+                                                else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                               else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            contentPadding = PaddingValues(vertical = 8.dp)
+                        ) {
+                            Text(side.replaceFirstChar { it.uppercase() })
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
                 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

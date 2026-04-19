@@ -5,5 +5,6 @@
     EdgeClip uses accessibility to read clipboard content in the background,
     so your copied text is always saved even when the app is not in focus.
     </string>
+    <string name="edge_clip_handler_desc">Edge panel handler. Tap to open clipboard history panel.</string>
 </resources>
 
