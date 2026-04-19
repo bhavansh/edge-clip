@@ -32,7 +32,9 @@ jobs:
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release-key.jks
 
       - name: Build with Gradle
-        run: ./gradlew assembleRelease
+        run: |
+          VERSION_NAME=${GITHUB_REF_NAME#v}
+          ./gradlew assembleRelease -PversionName=$VERSION_NAME
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
