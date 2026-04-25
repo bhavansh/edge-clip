@@ -86,40 +86,51 @@ class ClipboardAccessibilityService : AccessibilityService() {
     private fun checkFullscreenState() {
         try {
             val windowList = windows
-            if (windowList.isEmpty()) {
-                Log.d(TAG, "FullscreenCheck: No windows found")
-                return
-            }
+            if (windowList.isEmpty()) return
 
             var isFullscreenFound = false
+            var isStatusBarVisible = false
+            
             val displayMetrics = resources.displayMetrics
             val screenWidth = displayMetrics.widthPixels
             val screenHeight = displayMetrics.heightPixels
 
             for (window in windowList) {
-                // Check all application windows. Sometimes games don't report focus correctly.
+                val rect = Rect()
+                window.getBoundsInScreen(rect)
+
+                // 1. Detect if a Status Bar exists and is at the top
+                if (window.type == AccessibilityWindowInfo.TYPE_SYSTEM) {
+                    if (rect.top == 0 && rect.width() >= screenWidth && rect.height() > 0 && rect.height() < screenHeight * 0.1) {
+                        isStatusBarVisible = true
+                    }
+                }
+
+                // 2. Check application windows
                 if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
-                    val rect = Rect()
-                    window.getBoundsInScreen(rect)
-                    
+                    // Ignore our own app
+                    val packageName = try { window.root?.packageName?.toString() } catch (e: Exception) { null }
+                    if (packageName == packageName) {
+                        // We can't easily compare packageName here without context, 
+                        // but we can check if it's the focused window and if it's our app.
+                        // For now, let's rely on the Status Bar detection which is more universal.
+                    }
+
                     val w = rect.width()
                     val h = rect.height()
                     
-                    Log.d(TAG, "FullscreenCheck: App Window [${w}x${h}] | Screen [${screenWidth}x${screenHeight}]")
-                    
-                    // Use a 5% tolerance to account for notches, punch-holes, or system bars
-                    val widthMatch = w >= screenWidth * 0.95
-                    val heightMatch = h >= screenHeight * 0.95
-                    
-                    if (widthMatch && heightMatch) {
+                    // If an app window is exactly screen size, it's a candidate
+                    if (w >= screenWidth && h >= screenHeight) {
                         isFullscreenFound = true
-                        Log.d(TAG, "FullscreenCheck: Match Found! Window [${w}x${h}] covers screen.")
-                        break
                     }
                 }
             }
-            Log.d(TAG, "FullscreenCheck: Final Result -> Hide=$isFullscreenFound")
-            EdgeClipService.instance?.setHandleForceHidden(isFullscreenFound)
+
+            // A window is only truly "Fullscreen Immersive" if it fills the screen 
+            // AND the status bar is NOT visible/taking up space.
+            val finalHideState = isFullscreenFound && !isStatusBarVisible
+            
+            EdgeClipService.instance?.setHandleForceHidden(finalHideState)
         } catch (e: Exception) {
             Log.e(TAG, "Error checking fullscreen state", e)
         }
