@@ -142,7 +142,7 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     Box(modifier = Modifier.padding(padding)) {
                         if (selectedTab == 0) {
-                            HistoryScreen(repository)
+                            HistoryScreen(repository, storageStats)
                         } else {
                             SettingsScreen(
                                 hasOverlayPermission = hasOverlay,
@@ -415,8 +415,16 @@ fun SettingsScreen(
                 Spacer(Modifier.height(12.dp))
                 
                 Text("Retention Period", fontSize = 14.sp)
-                val retentionOptions = listOf(0, 5, 1, 7, 30, 90) // 0=Never, 5=5min, 1=1day, etc.
-                val retentionLabels = mapOf(0 to "Never", 5 to "5 Minutes (Testing)", 1 to "1 Day", 7 to "7 Days", 30 to "30 Days", 90 to "90 Days")
+                val retentionOptions = listOf(0, 1, 6, 24, 168, 720, 2160) // Hours
+                val retentionLabels = mapOf(
+                    0 to "Never", 
+                    1 to "1 Hour", 
+                    6 to "6 Hours", 
+                    24 to "1 Day", 
+                    168 to "7 Days", 
+                    720 to "30 Days", 
+                    2160 to "90 Days"
+                )
                 SettingsDropdown(
                     currentValue = retentionDays,
                     options = retentionOptions,

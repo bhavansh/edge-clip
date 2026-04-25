@@ -56,14 +56,10 @@ class ClipRepository private constructor(
         paths.forEach { File(it).delete() }
         dao.evictBeyondCap(cap)
         
-        // Also cleanup by time if enabled
-        val days = settings.retentionDays
-        if (days > 0) {
-            val ms = if (days == 5) {
-                5 * 60 * 1000L // 5 minutes for testing
-            } else {
-                days * 24 * 60 * 60 * 1000L
-            }
+        // Also cleanup by time if enabled (retention is stored in HOURS)
+        val hours = settings.retentionDays
+        if (hours > 0) {
+            val ms = hours.toLong() * 60 * 60 * 1000L
             val cutoff = System.currentTimeMillis() - ms
             val oldPaths = dao.getOldImagePaths(cutoff)
             oldPaths.forEach { File(it).delete() }

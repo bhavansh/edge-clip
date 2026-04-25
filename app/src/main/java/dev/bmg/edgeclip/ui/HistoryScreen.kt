@@ -29,9 +29,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
-fun HistoryScreen(repository: ClipRepository) {
+fun HistoryScreen(repository: ClipRepository, storageStats: ClipRepository.StorageStats?) {
     val clips by repository.clips.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -45,8 +48,18 @@ fun HistoryScreen(repository: ClipRepository) {
             "Clipboard History",
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 24.dp)
+            modifier = Modifier.padding(top = 24.dp)
         )
+        
+        storageStats?.let { stats ->
+            val sizeMb = String.format(Locale.US, "%.2f MB", stats.totalSize / (1024f * 1024f))
+            Text(
+                text = "$sizeMb  ·  ${stats.totalCount} items",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
 
         if (clips.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -58,11 +71,12 @@ fun HistoryScreen(repository: ClipRepository) {
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                items(clips, key = { it.id }) { clip ->
+                itemsIndexed(clips, key = { _, clip -> clip.id }) { index, clip ->
                     var showCopied by remember { mutableStateOf(false) }
                     
                     ClipItem(
                         clip = clip,
+                        index = index + 1,
                         onDelete = { scope.launch { repository.delete(clip) } },
                         onCopy = {
                             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -105,17 +119,41 @@ fun HistoryScreen(repository: ClipRepository) {
 }
 
 @Composable
-fun ClipItem(clip: ClipEntity, onDelete: () -> Unit, onCopy: () -> Unit, showCopied: Boolean) {
+fun ClipItem(clip: ClipEntity, index: Int, onDelete: () -> Unit, onCopy: () -> Unit, showCopied: Boolean) {
+    val timestamp = remember(clip.copiedAt) {
+        SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(clip.copiedAt))
+    }
+
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "#$index",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = timestamp,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                )
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
                 when (clip.type) {
                     ClipType.TEXT -> {
@@ -123,7 +161,8 @@ fun ClipItem(clip: ClipEntity, onDelete: () -> Unit, onCopy: () -> Unit, showCop
                             text = clip.text ?: "",
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = 20.sp
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
                     ClipType.IMAGE -> {
@@ -144,6 +183,7 @@ fun ClipItem(clip: ClipEntity, onDelete: () -> Unit, onCopy: () -> Unit, showCop
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(max = 200.dp)
+                                    .padding(bottom = 12.dp)
                                     .clip(RoundedCornerShape(8.dp)),
                                 contentScale = ContentScale.Crop
                             )
