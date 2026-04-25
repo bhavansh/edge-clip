@@ -86,7 +86,10 @@ class ClipboardAccessibilityService : AccessibilityService() {
     private fun checkFullscreenState() {
         try {
             val windowList = windows
-            if (windowList.isEmpty()) return
+            if (windowList.isEmpty()) {
+                Log.d(TAG, "FullscreenCheck: No windows found")
+                return
+            }
 
             var isFullscreenFound = false
             val displayMetrics = resources.displayMetrics
@@ -94,17 +97,28 @@ class ClipboardAccessibilityService : AccessibilityService() {
             val screenHeight = displayMetrics.heightPixels
 
             for (window in windowList) {
+                // Check all application windows. Sometimes games don't report focus correctly.
                 if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
                     val rect = Rect()
                     window.getBoundsInScreen(rect)
                     
-                    // If the application window covers the entire screen, it's likely fullscreen
-                    if (rect.width() >= screenWidth && rect.height() >= screenHeight) {
+                    val w = rect.width()
+                    val h = rect.height()
+                    
+                    Log.d(TAG, "FullscreenCheck: App Window [${w}x${h}] | Screen [${screenWidth}x${screenHeight}]")
+                    
+                    // Use a 5% tolerance to account for notches, punch-holes, or system bars
+                    val widthMatch = w >= screenWidth * 0.95
+                    val heightMatch = h >= screenHeight * 0.95
+                    
+                    if (widthMatch && heightMatch) {
                         isFullscreenFound = true
+                        Log.d(TAG, "FullscreenCheck: Match Found! Window [${w}x${h}] covers screen.")
                         break
                     }
                 }
             }
+            Log.d(TAG, "FullscreenCheck: Final Result -> Hide=$isFullscreenFound")
             EdgeClipService.instance?.setHandleForceHidden(isFullscreenFound)
         } catch (e: Exception) {
             Log.e(TAG, "Error checking fullscreen state", e)

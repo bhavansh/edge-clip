@@ -193,8 +193,14 @@ class EdgeClipService : Service() {
     fun setHandleForceHidden(hidden: Boolean) {
         if (::edgeView.isInitialized) {
             edgeView.post {
-                edgeView.visibility = if (hidden) View.GONE else View.VISIBLE
+                val newVisibility = if (hidden) View.GONE else View.VISIBLE
+                if (edgeView.visibility != newVisibility) {
+                    Log.d(TAG, "Visibility Change: $newVisibility")
+                    edgeView.visibility = newVisibility
+                }
             }
+        } else {
+            Log.d(TAG, "setHandleForceHidden: edgeView not initialized")
         }
     }
 
