@@ -24,19 +24,6 @@ class QuickballView(context: Context) : View(context) {
 
     init {
         paint.color = ContextCompat.getColor(context, R.color.handler_bg)
-        setupFullscreenObserver()
-    }
-
-    private fun setupFullscreenObserver() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            setOnApplyWindowInsetsListener { view, insets ->
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    val isFullscreen = !insets.isVisible(android.view.WindowInsets.Type.statusBars())
-                    view.visibility = if (isFullscreen) GONE else VISIBLE
-                }
-                insets
-            }
-        }
     }
 
     fun setSide(isLeft: Boolean) {

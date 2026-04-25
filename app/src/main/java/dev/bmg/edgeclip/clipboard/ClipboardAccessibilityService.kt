@@ -12,8 +12,11 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
+import android.graphics.Rect
 import dev.bmg.edgeclip.data.ClipRepository
 import dev.bmg.edgeclip.data.SettingsManager
+import dev.bmg.edgeclip.service.EdgeClipService
 import dev.bmg.edgeclip.service.ServiceState
 import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
@@ -35,7 +38,8 @@ class ClipboardAccessibilityService : AccessibilityService() {
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             eventTypes = AccessibilityEvent.TYPES_ALL_MASK
             notificationTimeout = 100
-            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or 
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
         
         Handler(Looper.getMainLooper()).postDelayed({ initClipboard() }, 300)
@@ -49,7 +53,13 @@ class ClipboardAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (!ServiceState.isServiceRunning.value) return
-        
+
+        // Fullscreen detection
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || 
+            event?.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            checkFullscreenState()
+        }
+
         val cm = clipboardManager ?: return
         val clip = cm.primaryClip ?: return
         if (clip.itemCount == 0) return
@@ -73,6 +83,34 @@ class ClipboardAccessibilityService : AccessibilityService() {
         lastStoredText = text
         scope.launch(Dispatchers.IO) { repository?.add(text) }
     }
+    private fun checkFullscreenState() {
+        try {
+            val windowList = windows
+            if (windowList.isEmpty()) return
+
+            var isFullscreenFound = false
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+
+            for (window in windowList) {
+                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                    val rect = Rect()
+                    window.getBoundsInScreen(rect)
+                    
+                    // If the application window covers the entire screen, it's likely fullscreen
+                    if (rect.width() >= screenWidth && rect.height() >= screenHeight) {
+                        isFullscreenFound = true
+                        break
+                    }
+                }
+            }
+            EdgeClipService.instance?.setHandleForceHidden(isFullscreenFound)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking fullscreen state", e)
+        }
+    }
+
     private fun handleImageClip(uri: Uri) {
         val uriString = uri.toString()
         if (isInternalCopy) {

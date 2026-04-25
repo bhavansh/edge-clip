@@ -190,6 +190,14 @@ class EdgeClipService : Service() {
         }
     }
 
+    fun setHandleForceHidden(hidden: Boolean) {
+        if (::edgeView.isInitialized) {
+            edgeView.post {
+                edgeView.visibility = if (hidden) View.GONE else View.VISIBLE
+            }
+        }
+    }
+
     // =========================================================================
     // Edge Handle
     // =========================================================================
