@@ -9,12 +9,16 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewOutlineProvider
+import android.util.Log
 import android.widget.*
 import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.net.Uri
 import android.widget.HorizontalScrollView
 import android.graphics.Color
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.StyleSpan
 import dev.bmg.edgeclip.R
 import dev.bmg.edgeclip.data.ClipEntity
 import dev.bmg.edgeclip.data.ClipRepository
@@ -58,60 +62,74 @@ class PanelUIManager(
     }
 
     private fun buildHeaderRow(): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(dpToPx(12), dpToPx(4), dpToPx(12), dpToPx(8))
+        orientation = LinearLayout.VERTICAL
+        setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
         
-        // Filter Chips (Scrollable)
-        val scroll = HorizontalScrollView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            isHorizontalScrollBarEnabled = false
-        }
-        
-        val chipContainer = LinearLayout(context).apply {
+        val row1 = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }
         
-        val filters = listOf("ALL", "URL", "PHONE", "OTP", "IMAGE")
-        filters.forEach { filter ->
-            val chip = TextView(context).apply {
-                text = filter
-                textSize = 10f
-                setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
-                val isSelected = currentFilter == filter
-                setTextColor(if (isSelected) Color.WHITE else ContextCompat.getColor(context, R.color.text_primary))
-                background = pill(if (isSelected) ContextCompat.getColor(context, R.color.purple_500) else ContextCompat.getColor(context, R.color.button_clear_bg))
-                
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).also { it.rightMargin = dpToPx(6) }
-                
-                setOnClickListener {
-                    currentFilter = filter
-                    EdgeClipService.instance?.triggerRefresh()
-                }
+        val row2 = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                it.topMargin = dpToPx(6)
             }
-            chipContainer.addView(chip)
         }
         
-        scroll.addView(chipContainer)
-        addView(scroll)
+        val buttonsRow1 = listOf("ALL", "PAUSE", "URL")
+        val buttonsRow2 = listOf("IMAGE", "OTP", "PHONE")
         
-        // Pause Button
-        val pauseBtn = ImageView(context).apply {
-            setImageResource(R.drawable.ic_pause)
-            val isPaused = settings.isPaused
-            setColorFilter(if (isPaused) ContextCompat.getColor(context, R.color.pill_text_danger) else ContextCompat.getColor(context, R.color.text_primary))
-            setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
-            layoutParams = LinearLayout.LayoutParams(dpToPx(36), dpToPx(36))
-            setOnClickListener {
-                settings.isPaused = !settings.isPaused
+        buttonsRow1.forEach { type -> row1.addView(createGridButton(type)) }
+        buttonsRow2.forEach { type -> row2.addView(createGridButton(type)) }
+        
+        addView(row1)
+        addView(row2)
+    }
+
+    private fun createGridButton(type: String): View = FrameLayout(context).apply {
+        layoutParams = LinearLayout.LayoutParams(0, dpToPx(34), 1f).also {
+            it.rightMargin = dpToPx(4)
+        }
+        
+        val isPausedType = type == "PAUSE"
+        val isSelected = currentFilter == type || (isPausedType && settings.isPaused)
+        
+        background = pill(when {
+            isPausedType && settings.isPaused -> ContextCompat.getColor(context, R.color.pill_text_danger)
+            isSelected -> ContextCompat.getColor(context, R.color.purple_500)
+            else -> ContextCompat.getColor(context, R.color.button_clear_bg)
+        }, cornerRadius = 12f)
+        
+        if (isPausedType) {
+            addView(ImageView(context).apply {
                 setImageResource(R.drawable.ic_pause)
-                setColorFilter(if (settings.isPaused) ContextCompat.getColor(context, R.color.pill_text_danger) else ContextCompat.getColor(context, R.color.text_primary))
-            }
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                setColorFilter(if (isSelected) Color.WHITE else ContextCompat.getColor(context, R.color.text_primary))
+                layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
+            })
+        } else {
+            addView(TextView(context).apply {
+                text = type
+                textSize = 9f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(if (isSelected) Color.WHITE else ContextCompat.getColor(context, R.color.text_primary))
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            })
         }
-        addView(pauseBtn)
+        
+        setOnClickListener {
+            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (isPausedType) {
+                settings.isPaused = !settings.isPaused
+                val msg = if (settings.isPaused) "Monitoring Paused" else "Monitoring Resumed"
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            } else {
+                currentFilter = type
+            }
+            EdgeClipService.instance?.triggerRefresh()
+        }
     }
 
     private fun buildEmptyState(): LinearLayout = LinearLayout(context).apply {
@@ -150,7 +168,31 @@ class PanelUIManager(
             when (clip.type) {
                 ClipType.TEXT -> {
                     addView(TextView(context).apply {
-                        text = clip.text
+                        val originalText = clip.text ?: ""
+                        val spannable = SpannableString(originalText)
+                        
+                        when (clip.subtype) {
+                            "OTP" -> {
+                                val regex = Regex("(?<![\\d.])\\d{4,8}(?![\\d.])")
+                                regex.find(originalText)?.let { match ->
+                                    val start = match.range.first
+                                    val end = match.range.last + 1
+                                    spannable.setSpan(ForegroundColorSpan(ContextCompat.getColor(context, R.color.color_otp_highlight)), start, end, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
+                                    spannable.setSpan(StyleSpan(Typeface.BOLD), start, end, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
+                                }
+                            }
+                            "PHONE" -> {
+                                val regex = Regex("(?:\\+?\\d{1,3}[- ]?)?\\d{3,5}[- ]?\\d{3,5}(?:[- ]?\\d{1,5})?")
+                                regex.find(originalText)?.let { match ->
+                                    val start = match.range.first
+                                    val end = match.range.last + 1
+                                    spannable.setSpan(ForegroundColorSpan(ContextCompat.getColor(context, R.color.color_phone_highlight)), start, end, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
+                                    spannable.setSpan(StyleSpan(Typeface.BOLD), start, end, SpannableString.SPAN_EXCLUSIVE_EXCLUSIVE)
+                                }
+                            }
+                        }
+                        
+                        text = spannable
                         textSize = 13f
                         setTextColor(ContextCompat.getColor(context, R.color.text_primary))
                         setLineSpacing(0f, 1.2f)
@@ -185,15 +227,20 @@ class PanelUIManager(
         if (clip.subtype != "NONE") {
             val actionBtn = ImageView(context).apply {
                 val iconRes = when (clip.subtype) {
-                    "URL" -> R.drawable.ic_web
+                    "URL" -> R.drawable.ic_link
                     "PHONE" -> R.drawable.ic_call
-                    "OTP" -> R.drawable.ic_check
+                    "OTP" -> R.drawable.ic_key
                     else -> 0
                 }
                 if (iconRes != 0) {
                     setImageResource(iconRes)
                     scaleType = ImageView.ScaleType.CENTER_INSIDE
-                    setColorFilter(ContextCompat.getColor(context, R.color.purple_500))
+                    val tint = when (clip.subtype) {
+                        "OTP" -> ContextCompat.getColor(context, R.color.color_otp_highlight)
+                        "PHONE" -> ContextCompat.getColor(context, R.color.color_phone_highlight)
+                        else -> ContextCompat.getColor(context, R.color.purple_500)
+                    }
+                    setColorFilter(tint)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
                     setOnClickListener { performAction(clip) }
                 }
@@ -325,6 +372,6 @@ class PanelUIManager(
     private fun dpToPx(dp: Int): Int =
         (dp * context.resources.displayMetrics.density + 0.5f).toInt()
 
-    private fun pill(color: Int) =
-        GradientDrawable().apply { setColor(color); cornerRadius = 999f }
+    private fun pill(color: Int, cornerRadius: Float = 999f) =
+        GradientDrawable().apply { setColor(color); this.cornerRadius = dpToPx(cornerRadius.toInt()).toFloat() }
 }

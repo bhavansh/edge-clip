@@ -4,11 +4,13 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,13 +21,20 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.bmg.edgeclip.R
 import dev.bmg.edgeclip.data.ClipEntity
 import dev.bmg.edgeclip.data.ClipRepository
 import dev.bmg.edgeclip.data.ClipType
+import dev.bmg.edgeclip.ui.theme.OtpDark
+import dev.bmg.edgeclip.ui.theme.OtpLight
+import dev.bmg.edgeclip.ui.theme.PhoneDark
+import dev.bmg.edgeclip.ui.theme.PhoneLight
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -34,20 +43,22 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-import androidx.compose.material3.*
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Clear
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(repository: ClipRepository, storageStats: ClipRepository.StorageStats?) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("ALL") }
+    
     val clips by (if (searchQuery.isBlank()) repository.clips else repository.search(searchQuery))
         .collectAsState(initial = emptyList())
+    
+    val filteredClips = remember(clips, selectedFilter) {
+        when (selectedFilter) {
+            "ALL" -> clips
+            "IMAGE" -> clips.filter { it.type == ClipType.IMAGE }
+            else -> clips.filter { it.subtype == selectedFilter }
+        }
+    }
     
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -78,15 +89,15 @@ fun HistoryScreen(repository: ClipRepository, storageStats: ClipRepository.Stora
             value = searchQuery,
             onValueChange = { searchQuery = it },
             placeholder = { Text("Search history...") },
-            leadingIcon = { Icon(Icons.Default.Search, null) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_search), null, modifier = Modifier.size(20.dp)) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
                     IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Default.Clear, null)
+                        Icon(painterResource(R.drawable.ic_close), null, modifier = Modifier.size(20.dp))
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -94,7 +105,25 @@ fun HistoryScreen(repository: ClipRepository, storageStats: ClipRepository.Stora
             )
         )
 
-        if (clips.isEmpty()) {
+        val filterTypes = listOf("ALL", "URL", "PHONE", "OTP", "IMAGE")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            filterTypes.forEach { type ->
+                FilterChip(
+                    selected = selectedFilter == type,
+                    onClick = { selectedFilter = type },
+                    label = { Text(type, fontSize = 12.sp) },
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        }
+
+        if (filteredClips.isEmpty()) {
             Box(Modifier.fillMaxSize().weight(1f), contentAlignment = Alignment.Center) {
                 Text(if (searchQuery.isEmpty()) "No items found" else "No results for \"$searchQuery\"", 
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
@@ -105,7 +134,7 @@ fun HistoryScreen(repository: ClipRepository, storageStats: ClipRepository.Stora
                 modifier = Modifier.fillMaxSize().weight(1f),
                 contentPadding = PaddingValues(bottom = 20.dp)
             ) {
-                itemsIndexed(clips, key = { _, clip -> clip.id }) { index, clip ->
+                itemsIndexed(filteredClips, key = { _, clip -> clip.id }) { index, clip ->
                     var showCopied by remember { mutableStateOf(false) }
                     
                     SwipeToDeleteContainer(
@@ -127,17 +156,20 @@ fun HistoryScreen(repository: ClipRepository, storageStats: ClipRepository.Stora
                         )
                     }
                 }
-                item {
-                    Spacer(Modifier.height(16.dp))
-                    Button(
-                        onClick = { scope.launch { repository.clearAll() } },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Clear All")
+                
+                if (selectedFilter == "ALL") {
+                    item {
+                        Spacer(Modifier.height(16.dp))
+                        Button(
+                            onClick = { scope.launch { repository.clearAll() } },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Clear All")
+                        }
+                        Spacer(Modifier.height(16.dp))
                     }
-                    Spacer(Modifier.height(16.dp))
                 }
             }
         }
@@ -150,14 +182,14 @@ fun SwipeToDeleteContainer(
     onDelete: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    val state = rememberSwipeToDismissBoxState(
-        confirmValueChange = {
-            if (it == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
-                true
-            } else false
+    val state = rememberSwipeToDismissBoxState()
+
+    LaunchedEffect(state.currentValue) {
+        if (state.currentValue == SwipeToDismissBoxValue.EndToStart) {
+            onDelete()
+            state.snapTo(SwipeToDismissBoxValue.Settled)
         }
-    )
+    }
 
     SwipeToDismissBox(
         state = state,
@@ -198,6 +230,7 @@ private fun copyToClipboard(context: android.content.Context, clip: ClipEntity) 
 
 @Composable
 fun ClipItem(clip: ClipEntity, index: Int, onDelete: () -> Unit, onCopy: () -> Unit, showCopied: Boolean) {
+    val context = LocalContext.current
     val timestamp = remember(clip.copiedAt) {
         SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(clip.copiedAt))
     }
@@ -235,8 +268,40 @@ fun ClipItem(clip: ClipEntity, index: Int, onDelete: () -> Unit, onCopy: () -> U
             ) {
                 when (clip.type) {
                     ClipType.TEXT -> {
+                        val isDark = isSystemInDarkTheme()
+                        val otpColor = if (isDark) OtpDark else OtpLight
+                        val phoneColor = if (isDark) PhoneDark else PhoneLight
+                        
+                        val annotatedText = buildAnnotatedString {
+                            val text = clip.text ?: ""
+                            append(text)
+                            
+                            when (clip.subtype) {
+                                "OTP" -> {
+                                    val regex = Regex("(?<![\\d.])\\d{4,8}(?![\\d.])")
+                                    regex.find(text)?.let { match ->
+                                        addStyle(
+                                            style = SpanStyle(color = otpColor, fontWeight = FontWeight.Bold),
+                                            start = match.range.first,
+                                            end = match.range.last + 1
+                                        )
+                                    }
+                                }
+                                "PHONE" -> {
+                                    val regex = Regex("(?:\\+?\\d{1,3}[- ]?)?\\d{3,5}[- ]?\\d{3,5}(?:[- ]?\\d{1,5})?")
+                                    regex.find(text)?.let { match ->
+                                        addStyle(
+                                            style = SpanStyle(color = phoneColor, fontWeight = FontWeight.Bold),
+                                            start = match.range.first,
+                                            end = match.range.last + 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         Text(
-                            text = clip.text ?: "",
+                            text = annotatedText,
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             lineHeight = 20.sp,
@@ -282,7 +347,6 @@ fun ClipItem(clip: ClipEntity, index: Int, onDelete: () -> Unit, onCopy: () -> U
                     IconButton(
                         onClick = { 
                             val text = clip.text ?: ""
-                            val context = context
                             try {
                                 val intent = when (clip.subtype) {
                                     "URL" -> android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(text))
@@ -304,16 +368,22 @@ fun ClipItem(clip: ClipEntity, index: Int, onDelete: () -> Unit, onCopy: () -> U
                         modifier = Modifier.weight(1f)
                     ) {
                         val iconRes = when (clip.subtype) {
-                            "URL" -> R.drawable.ic_web
+                            "URL" -> R.drawable.ic_link
                             "PHONE" -> R.drawable.ic_call
-                            "OTP" -> R.drawable.ic_check
+                            "OTP" -> R.drawable.ic_key
                             else -> 0
                         }
                         if (iconRes != 0) {
+                            val isDark = isSystemInDarkTheme()
+                            val tint = when (clip.subtype) {
+                                "OTP" -> if (isDark) OtpDark else OtpLight
+                                "PHONE" -> if (isDark) PhoneDark else PhoneLight
+                                else -> MaterialTheme.colorScheme.secondary
+                            }
                             Icon(
                                 painter = painterResource(iconRes),
                                 contentDescription = "Action",
-                                tint = MaterialTheme.colorScheme.secondary,
+                                tint = tint,
                                 modifier = Modifier.size(20.dp)
                             )
                         }

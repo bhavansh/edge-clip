@@ -11,7 +11,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.security.SecureRandom
 import android.util.Base64
 
-@Database(entities = [ClipEntity::class], version = 2, exportSchema = false)
+@Database(entities = [ClipEntity::class], version = 3, exportSchema = false)
 abstract class ClipDatabase : RoomDatabase() {
 
     abstract fun clipDao(): ClipDao

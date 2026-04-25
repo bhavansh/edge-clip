@@ -32,4 +32,7 @@
     
     <color name="button_clear_bg">#EBEBF0</color>
     <color name="button_clear_text">#636366</color>
+    
+    <color name="color_otp_highlight">#FF9500</color>
+    <color name="color_phone_highlight">#007AFF</color>
 </resources>

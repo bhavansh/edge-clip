@@ -38,13 +38,21 @@ class ClipRepository private constructor(
         val urlRegex = Regex("^(https?|ftp|file)://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|]", RegexOption.IGNORE_CASE)
         if (urlRegex.containsMatchIn(trimmed)) return "URL"
         
-        // 2. OTP Detection (4-8 consecutive digits)
-        val otpRegex = Regex("\\b\\d{4,8}\\b")
-        if (otpRegex.containsMatchIn(trimmed)) return "OTP"
-        
-        // 3. Phone Detection
-        val phoneRegex = Regex("(\\+\\d{1,3}[- ]?)?\\d{10}")
+        // 2. Phone Detection
+        val phoneRegex = Regex("(?:\\+?\\d{1,3}[- ]?)?\\d{3,5}[- ]?\\d{3,5}(?:[- ]?\\d{1,5})?")
         if (phoneRegex.containsMatchIn(trimmed)) return "PHONE"
+        
+        // 3. OTP Detection (4-8 digits, no decimals)
+        val otpRegex = Regex("(?<![\\d.])\\d{4,8}(?![\\d.])")
+        val otpMatch = otpRegex.find(trimmed)
+        if (otpMatch != null) {
+            val otpValue = otpMatch.value
+            val keywords = listOf("otp", "code", "verification", "auth", "login", "pin", "password")
+            val hasKeyword = keywords.any { trimmed.contains(it, ignoreCase = true) }
+            
+            // It's an OTP if it's the ONLY thing in the string OR it has a context keyword
+            if (trimmed == otpValue || hasKeyword) return "OTP"
+        }
         
         return "NONE"
     }

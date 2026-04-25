@@ -4,7 +4,9 @@ package dev.bmg.edgeclip
 import android.Manifest
 import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,8 +16,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,24 +31,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.bmg.edgeclip.clipboard.ClipboardAccessibilityService
+import dev.bmg.edgeclip.data.ClipRepository
 import dev.bmg.edgeclip.data.SettingsManager
 import dev.bmg.edgeclip.service.EdgeClipService
 import dev.bmg.edgeclip.service.ServiceState
-import dev.bmg.edgeclip.ui.theme.EdgeClipTheme
-
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import dev.bmg.edgeclip.data.ClipRepository
 import dev.bmg.edgeclip.ui.HistoryScreen
+import dev.bmg.edgeclip.ui.theme.EdgeClipTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,6 +76,7 @@ class MainActivity : ComponentActivity() {
             var retentionDays by remember { mutableIntStateOf(settingsManager.retentionDays) }
             var closeOutside by remember { mutableStateOf(settingsManager.closeOnOutsideClick) }
             var blacklistedPackages by remember { mutableStateOf(settingsManager.blacklistedPackages) }
+            var isPaused by remember { mutableStateOf(settingsManager.isPaused) }
             var storageStats by remember { mutableStateOf<ClipRepository.StorageStats?>(null) }
             
             val scope = rememberCoroutineScope()
@@ -116,6 +122,7 @@ class MainActivity : ComponentActivity() {
                     if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                         hasOverlay = Settings.canDrawOverlays(this@MainActivity)
                         hasA11y = isAccessibilityEnabled()
+                        isPaused = settingsManager.isPaused
                         scope.launch(Dispatchers.IO) {
                             storageStats = repository.getStorageStats()
                         }
@@ -161,8 +168,14 @@ class MainActivity : ComponentActivity() {
                                 dbLimit = dbLimit,
                                 retentionDays = retentionDays,
                                 closeOutside = closeOutside,
+                                isPaused = isPaused,
                                 storageStats = storageStats,
                                 blacklistedPackages = blacklistedPackages,
+                                onPauseToggle = {
+                                    isPaused = it
+                                    settingsManager.isPaused = it
+                                    EdgeClipService.instance?.triggerRefresh()
+                                },
                                 onBgPollingToggle = {
                                     bgPollingEnabled = it
                                     settingsManager.isBackgroundPollingEnabled = it
@@ -259,8 +272,10 @@ fun SettingsScreen(
     dbLimit: Int,
     retentionDays: Int,
     closeOutside: Boolean,
+    isPaused: Boolean,
     storageStats: ClipRepository.StorageStats?,
     blacklistedPackages: Set<String>,
+    onPauseToggle: (Boolean) -> Unit,
     onBgPollingToggle: (Boolean) -> Unit,
     onPollingFreqChange: (Int) -> Unit,
     onEdgeSideChange: (String) -> Unit,
@@ -278,6 +293,7 @@ fun SettingsScreen(
     val allGranted = hasOverlayPermission && hasAccessibilityPermission && hasNotificationPermission
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var pendingLimit by remember { mutableIntStateOf(dbLimit) }
+    var showBlacklistDialog by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -354,17 +370,26 @@ fun SettingsScreen(
 
             // ── Permissions card ───────────────────────────────────────
             OneUICard {
-                Text(
-                    "Permissions",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Text("Permissions", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(10.dp))
                 PermissionRow(label = "Overlay Permission", granted = hasOverlayPermission, onGrant = onRequestOverlay)
                 PermissionRow(label = "Accessibility Service", granted = hasAccessibilityPermission, onGrant = onRequestAccessibility, showHint = Build.VERSION.SDK_INT >= 33 && !hasAccessibilityPermission)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     PermissionRow(label = "Notifications", granted = hasNotificationPermission, onGrant = onRequestNotification)
+                }
+            }
+
+            // ── General Settings card ──────────────────────────────────
+            OneUICard {
+                Text("General Settings", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Spacer(Modifier.height(8.dp))
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Pause Monitoring", fontSize = 14.sp)
+                        Text("Stop recording clipboard clips temporarily", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    }
+                    Switch(checked = isPaused, onCheckedChange = onPauseToggle)
                 }
             }
 
@@ -529,10 +554,21 @@ fun BlacklistDialog(
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            val installedApps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-                .filter { it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || it.packageName == "com.google.android.youtube" }
+            val mainIntent = Intent(Intent.ACTION_MAIN, null).addCategory(Intent.CATEGORY_LAUNCHER)
+            val resolvedInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.queryIntentActivities(mainIntent, PackageManager.ResolveInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.queryIntentActivities(mainIntent, 0)
+            }
+
+            val installedApps = resolvedInfos
+                .map { it.activityInfo.applicationInfo }
+                .distinctBy { it.packageName }
+                .filter { it.packageName != context.packageName } // Don't blacklist ourselves
                 .map { AppInfo(it.loadLabel(pm).toString(), it.packageName, it.loadIcon(pm)) }
-                .sortedBy { it.name }
+                .sortedWith(compareBy<AppInfo> { !currentBlacklist.contains(it.packageName) }.thenBy { it.name })
+            
             apps = installedApps
             isLoading = false
         }
@@ -549,7 +585,8 @@ fun BlacklistDialog(
                     placeholder = { Text("Search apps...") },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                    singleLine = true,
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_search), null, modifier = Modifier.size(20.dp)) }
                 )
                 
                 if (isLoading) {
@@ -560,12 +597,13 @@ fun BlacklistDialog(
                     val filteredApps = apps.filter { it.name.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true) }
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(filteredApps) { app ->
+                            val isChecked = selectedPackages.value.contains(app.packageName)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        if (selectedPackages.value.contains(app.packageName)) {
+                                        if (isChecked) {
                                             selectedPackages.value = selectedPackages.value.toMutableSet().apply { remove(app.packageName) }
                                         } else {
                                             selectedPackages.value = selectedPackages.value.toMutableSet().apply { add(app.packageName) }
@@ -580,14 +618,19 @@ fun BlacklistDialog(
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(app.name, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Text(app.packageName, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                                    Text(
+                                        text = app.name, 
+                                        fontSize = 15.sp, 
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
                                 }
                                 Checkbox(
-                                    checked = selectedPackages.value.contains(app.packageName),
+                                    checked = isChecked,
                                     onCheckedChange = null
                                 )
                             }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.05f))
                         }
                     }
                 }

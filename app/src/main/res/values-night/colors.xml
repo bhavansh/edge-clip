@@ -23,4 +23,7 @@
     
     <color name="button_clear_bg">#2C2C2E</color>
     <color name="button_clear_text">#EBEBF5</color>
+
+    <color name="color_otp_highlight">#FFB340</color>
+    <color name="color_phone_highlight">#0A84FF</color>
 </resources>

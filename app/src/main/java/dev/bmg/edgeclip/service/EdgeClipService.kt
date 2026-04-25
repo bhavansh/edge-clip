@@ -45,9 +45,12 @@ class EdgeClipService : Service() {
 
     private var currentFocusedPackage: String? = null
     private var isBlacklistedAppFocused = false
+    private var autoPaused = false
+    private var isProgrammaticUpdate = false
 
     private val restingWidthDp = 26
-    ...
+    private val fullWidthDp = 40
+
     private val settingsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == SettingsManager.KEY_BG_POLLING || key == SettingsManager.KEY_POLLING_FREQ) {
             if (::focusManager.isInitialized) {
@@ -56,14 +59,22 @@ class EdgeClipService : Service() {
         } else if (key == SettingsManager.KEY_EDGE_SIDE) {
             updateHandleSide()
         } else if (key == SettingsManager.KEY_IS_PAUSED || key == SettingsManager.KEY_BLACKLIST) {
+            // If user manually toggled pause while in a blacklisted app, clear autoPaused
+            if (key == SettingsManager.KEY_IS_PAUSED && isBlacklistedAppFocused && !isProgrammaticUpdate) {
+                autoPaused = false
+            }
+
+            if (key == SettingsManager.KEY_BLACKLIST) {
+                currentFocusedPackage?.let { recalculateBlacklist(it) }
+            }
             updateVisibilityState()
         }
     }
 
     private fun updateVisibilityState() {
         val isPaused = settingsManager.isPaused
-        val shouldHide = isPaused || isBlacklistedAppFocused
-        setHandleForceHidden(shouldHide)
+        // We no longer force hide the handle for blacklist, just honor the pause state
+        setHandleForceHidden(false) 
 
         if (isPaused) {
             focusManager.stopPeriodicClipboardPoll()
@@ -73,15 +84,42 @@ class EdgeClipService : Service() {
     }
 
     fun onPackageFocused(packageName: String) {
-        currentFocusedPackage = packageName
-        val wasBlacklisted = isBlacklistedAppFocused
-        isBlacklistedAppFocused = settingsManager.blacklistedPackages.contains(packageName)
-
-        if (wasBlacklisted != isBlacklistedAppFocused) {
-            updateVisibilityState()
-        }
+        val trimmedPkg = packageName.trim()
+        if (trimmedPkg == currentFocusedPackage) return
+        currentFocusedPackage = trimmedPkg
+        
+        // Ignore our own package so we don't accidentally resume monitoring
+        // when the Edge Panel or Settings is opened over a blacklisted app.
+        if (trimmedPkg == this.packageName) return
+        
+        recalculateBlacklist(trimmedPkg)
     }
 
+    private fun recalculateBlacklist(packageName: String) {
+        val isNowBlacklisted = settingsManager.blacklistedPackages.contains(packageName)
+        val wasBlacklisted = isBlacklistedAppFocused
+        isBlacklistedAppFocused = isNowBlacklisted
+
+        if (isNowBlacklisted && !settingsManager.isPaused) {
+            // Auto-pause when entering
+            isProgrammaticUpdate = true
+            settingsManager.isPaused = true
+            isProgrammaticUpdate = false
+            autoPaused = true
+            Toast.makeText(this, "EdgeClip paused: Blacklisted app", Toast.LENGTH_SHORT).show()
+        } else if (!isNowBlacklisted && wasBlacklisted && autoPaused && settingsManager.isPaused) {
+            // Auto-resume when leaving if we were the ones who paused it
+            isProgrammaticUpdate = true
+            settingsManager.isPaused = false
+            isProgrammaticUpdate = false
+            autoPaused = false
+            Toast.makeText(this, "EdgeClip resumed", Toast.LENGTH_SHORT).show()
+        } else if (!isNowBlacklisted && autoPaused) {
+            // Relinquish auto-pause control if user manually unpaused while inside
+            autoPaused = false
+        }
+        
+        updateVisibilityState()
     }
 
     private fun updateHandleSide() {
