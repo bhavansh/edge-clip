@@ -39,7 +39,7 @@ class ClipRepository private constructor(
         if (urlRegex.containsMatchIn(trimmed)) return "URL"
         
         // 2. OTP Detection (4-8 digits, no decimals)
-        val otpRegex = Regex("(?<![\\d.])\\d{4,8}(?![\\d.])")
+        val otpRegex = Regex("(?<![\\d.])\\b\\d{4,8}\\b(?!\\.[\\d])")
         val otpMatch = otpRegex.find(trimmed)
         if (otpMatch != null) {
             val otpValue = otpMatch.value
