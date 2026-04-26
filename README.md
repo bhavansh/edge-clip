@@ -1,4 +1,4 @@
-# <img src="metadata/app_icon.png" width="48" height="48" /> EdgeClip - Secure & Smart Clipboard Manager
+# ![Icon](metadata/app_icon.png) EdgeClip - Secure & Smart Clipboard Manager
 
 EdgeClip is a professional-grade, privacy-focused clipboard manager for Android. It bridges the gap between productivity and security by providing instant access to clipboard history through a non-intrusive edge overlay, while ensuring all data remains locally encrypted and under the user's control.
 
@@ -37,11 +37,11 @@ This project demonstrates expertise in:
 
 | Smart Edge Panel | Media & Links | Smart History |
 |:---:|:---:|:---:|
-| <img src="screenshots/edge_panel_otp.jpg" width="280"> | <img src="screenshots/edge_panel_media.jpg" width="280"> | <img src="screenshots/history_main.jpg" width="280"> |
+| ![Edge Panel](screenshots/edge_panel_otp.jpg) | ![Media & Links](screenshots/edge_panel_media.jpg) | ![Smart History](screenshots/history_main.jpg) |
 
 | Permissions Setup | Advanced Settings | Overlay Config |
 |:---:|:---:|:---:|
-| <img src="screenshots/settings_permissions.jpg" width="280"> | <img src="screenshots/settings_db.jpg" width="280"> | <img src="screenshots/settings_overlay.jpg" width="280"> |
+| ![Permissions Setup](screenshots/settings_permissions.jpg) | ![Advanced Settings](screenshots/settings_db.jpg) | ![Overlay Config](screenshots/settings_overlay.jpg) |
 
 ---
 
